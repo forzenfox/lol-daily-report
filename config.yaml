@@ -1,0 +1,17 @@
+timezone: Asia/Shanghai
+schedule:
+  cron_utc: "0 21 * * *"
+  description: "每天 05:00（Asia/Shanghai）运行"
+
+accounts:
+  - display_name: "斗鱼丶胡凯利"
+    riot_id: "斗鱼丶胡凯利#2862"
+    region: "kr"
+    enabled: true
+
+report:
+  output_dir: "output"
+  minimum_games_for_judgement: 3
+  source_label: "OP.GG"
+  render_image: true
+  auto_update_champions: true

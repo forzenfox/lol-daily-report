@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 运行时缓存与产物
+.cache/
+output/
+
+# 编辑器
+.idea/
+.vscode/
