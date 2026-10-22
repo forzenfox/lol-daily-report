@@ -5,9 +5,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# 运行时缓存与产物
+# 运行时缓存
 .cache/
-output/
 
 # 编辑器
 .idea/
