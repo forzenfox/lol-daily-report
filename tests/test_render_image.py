@@ -91,6 +91,21 @@ def available_font() -> str | None:
     return None
 
 
+def test_repository_font_is_the_first_candidate() -> None:
+    """仓库内 Noto 字体应作为首选，保证本地与 CI 渲染一致。"""
+    assert "assets" in DEFAULT_FONT_CANDIDATES[0]
+    assert Path(DEFAULT_FONT_CANDIDATES[0]).exists()
+
+
+def test_find_font_prefers_repository_font() -> None:
+    repo_font = DEFAULT_FONT_CANDIDATES[0]
+    if not Path(repo_font).exists():
+        pytest.skip("仓库字体未入库")
+
+    font = find_font(24)
+    assert Path(font.path).resolve() == Path(repo_font).resolve()
+
+
 def test_find_font_raises_when_no_candidate_exists(tmp_path: Path) -> None:
     with pytest.raises(ImageRenderError):
         find_font(24, paths=[str(tmp_path / "missing.ttf")])

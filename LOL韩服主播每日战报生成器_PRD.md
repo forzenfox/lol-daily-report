@@ -332,6 +332,9 @@ lol-daily-report/
     4.9 MB），由 `scripts/fetch_champions.py` 生成/补齐；运行时检测到英雄无映射、
     头像缺失或 PNG 损坏会自动刷新一次（6 小时冷却），可用
     `report.auto_update_champions` 关闭
+-   渲染字体：Noto Sans CJK SC Bold（`assets/fonts/`，OFL 许可）随仓库分发，
+    渲染优先使用；本地 Windows 与 CI 共用同一字体，保证 PNG 渲染一致，
+    CI 无需 apt 安装字体
 -   `pytest` / `ruff`：单元测试与静态检查
 -   GitHub Actions：定时运行和产物归档
 

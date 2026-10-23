@@ -15,7 +15,12 @@ from report import ReportContext
 from stats import DailyStats
 from titles import Title
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_FONT = REPO_ROOT / "assets" / "fonts" / "NotoSansCJKsc-Bold.otf"
+
+# 仓库内字体优先：本地（Windows）与 CI（Linux）使用同一字体，保证渲染结果一致。
 DEFAULT_FONT_CANDIDATES: tuple[str, ...] = (
+    str(REPO_FONT),
     "C:/Windows/Fonts/msyhbd.ttc",
     "C:/Windows/Fonts/msyh.ttc",
     "C:/Windows/Fonts/simhei.ttf",

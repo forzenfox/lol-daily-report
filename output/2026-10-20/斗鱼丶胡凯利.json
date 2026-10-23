@@ -16,7 +16,7 @@
     "collector": "getgames",
     "url": "https://op.gg/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
   },
-  "fetched_at": "2026-10-22T04:17:53.243316+00:00",
+  "fetched_at": "2026-10-23T02:53:37.271927+00:00",
   "stats": {
     "total_games": 7,
     "wins": 5,
@@ -138,7 +138,7 @@
       "op_score": 4.8,
       "kill_participation": 21,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj_8Fkmxhg7a8qAKldY54Q2XUnPgLVtlp4E=",
@@ -160,7 +160,7 @@
       "op_score": 4.3,
       "kill_participation": 38,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8xVWQH8-stuMBrCBAbk7CxcthG3MiSuo4=",
@@ -182,7 +182,7 @@
       "op_score": 4.8,
       "kill_participation": 17,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8N6pMcpAnnWrGW41Il5hKkHFAABfzEG_I=",
@@ -204,7 +204,7 @@
       "op_score": 7.4,
       "kill_participation": 55,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8Qhlb_GSN6Hw8fy6mavF2Txm5RiNmShrA=",
@@ -226,7 +226,7 @@
       "op_score": 6.5,
       "kill_participation": 49,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj_u9grBe83Y3R-93o3deoXz7v2rUzsnOTs=",
@@ -248,7 +248,7 @@
       "op_score": 3.6,
       "kill_participation": 24,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     },
     {
       "match_id": "m_eaDVNbCj9UQgi--cJJ8o7LfLyb7sHQJ68ODcaUNuA=",
@@ -270,7 +270,7 @@
       "op_score": 4.5,
       "kill_participation": 19,
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-22T04:17:53.243316+00:00"
+      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
     }
   ]
 }

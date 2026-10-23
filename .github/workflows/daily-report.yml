@@ -40,13 +40,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 安装中文字体
-        run: |
-          if ! fc-list :lang=zh | grep -q .; then
-            sudo apt-get update
-            sudo apt-get install -y fonts-noto-cjk
-          fi
-
       - name: 计算统计日期
         env:
           TZ: Asia/Shanghai
