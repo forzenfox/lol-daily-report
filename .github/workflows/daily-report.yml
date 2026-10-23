@@ -47,7 +47,7 @@ jobs:
             sudo apt-get install -y fonts-noto-cjk
           fi
 
-      - name: 生成战报
+      - name: 计算统计日期
         env:
           TZ: Asia/Shanghai
           INPUT_DATE: ${{ inputs.date }}
@@ -55,15 +55,9 @@ jobs:
           target="${INPUT_DATE:-$(date -d 'yesterday' +%F)}"
           echo "统计日期: ${target}"
           echo "TARGET_DATE=${target}" >> "$GITHUB_ENV"
-          python src/main.py --date "${target}"
 
-      - name: 提交产物到仓库（PR 自动合并）
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: 切换到产物分支
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           branch="output/${TARGET_DATE}"
 
           # 同名分支已存在时基于它追加提交（fast-forward），避免覆盖历史
@@ -74,14 +68,28 @@ jobs:
             git checkout -B "${branch}" main
           fi
 
-          git add output/
-          if git diff --cached --quiet; then
-            echo "产物无变化，跳过提交"
-            exit 0
-          fi
+      - name: 生成战报
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          python src/main.py --date "${TARGET_DATE}"
 
-          git commit -m "战报产物：${TARGET_DATE}"
-          git push origin "${branch}"
+      - name: 提交产物到仓库（PR 自动合并）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          branch="output/${TARGET_DATE}"
+          git add output/
+
+          if ! git diff --cached --quiet; then
+            git commit -m "战报产物：${TARGET_DATE}"
+            git push origin "${branch}"
+          else
+            echo "产物无变化，跳过提交"
+          fi
 
           gh pr create \
             --base main \
