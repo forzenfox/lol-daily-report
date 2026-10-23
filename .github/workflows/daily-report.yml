@@ -88,11 +88,18 @@ jobs:
             --head "${branch}" \
             --title "战报产物：${TARGET_DATE}" \
             --body "每日战报自动生成（output/），由 Actions 自动合并。" \
-            || echo "PR 已存在，跳过创建"
+            || echo "PR 已存在或无差异，跳过创建"
+
+          # 仅在存在 open PR 时执行自动合并
+          pr_number=$(gh pr list --head "${branch}" --state open --json number --jq '.[0].number')
+          if [ -z "${pr_number}" ] || [ "${pr_number}" = "null" ]; then
+            echo "无可合并的 open PR（可能已合并），跳过"
+            exit 0
+          fi
 
           # 优先排队自动合并（启用分支保护时等待检查）；未开启 auto-merge 时直接合并
-          gh pr merge "${branch}" --auto --squash --delete-branch \
-            || gh pr merge "${branch}" --squash --delete-branch
+          gh pr merge "${pr_number}" --auto --squash --delete-branch \
+            || gh pr merge "${pr_number}" --squash --delete-branch
 
       - name: 上传产物
         if: always()
