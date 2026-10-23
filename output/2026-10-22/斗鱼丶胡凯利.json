@@ -1,0 +1,95 @@
+{
+  "account": "斗鱼丶胡凯利#2862",
+  "display_name": "斗鱼丶胡凯利",
+  "region": "kr",
+  "day": "2026-10-22",
+  "window": {
+    "start": "2026-10-22T00:00:00+08:00",
+    "end": "2026-10-23T00:00:00+08:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "complete": true,
+  "pages": 1,
+  "warnings": [],
+  "source": {
+    "provider": "opgg",
+    "collector": "getgames",
+    "url": "https://op.gg/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
+  },
+  "fetched_at": "2026-10-23T02:23:17.542948+00:00",
+  "stats": {
+    "total_games": 2,
+    "wins": 2,
+    "losses": 0,
+    "win_rate": 100.0,
+    "kda": 1.36,
+    "avg_kills": 2.0,
+    "avg_deaths": 5.5,
+    "avg_assists": 5.5,
+    "avg_duration_seconds": 1778,
+    "avg_cs": 220.0,
+    "cs_per_min": 7.4,
+    "sample_sufficient": false,
+    "champions": [
+      {
+        "champion_key": "yone",
+        "champion_name": "封魔剑魂",
+        "games": 2,
+        "wins": 2,
+        "losses": 0,
+        "win_rate": 100.0,
+        "kda": 1.36,
+        "avg_kills": 2.0,
+        "avg_deaths": 5.5,
+        "avg_assists": 5.5
+      }
+    ]
+  },
+  "titles": [],
+  "matches": [
+    {
+      "match_id": "m_eaDVNbCj_LPZoe1t3jAy99QOv90mhg3l5L9DqSAcQ=",
+      "start_time": "2026-10-22T11:54:54+08:00",
+      "duration_seconds": 1263,
+      "win": true,
+      "champion_key": "yone",
+      "champion_name": "封魔剑魂",
+      "kills": 1,
+      "deaths": 4,
+      "assists": 4,
+      "cs": 153,
+      "position": "TOP",
+      "queue_type": "SOLORANKED",
+      "queue_label": "Ranked Solo/Duo",
+      "game_map": "SUMMONERS_RIFT",
+      "kda_ratio": 1.25,
+      "cs_per_min": 7.3,
+      "op_score": 4.3,
+      "kill_participation": 17,
+      "source": "opgg-getgames",
+      "fetched_at": "2026-10-23T02:23:17.542948+00:00"
+    },
+    {
+      "match_id": "m_eaDVNbCj-7ff0JinZDRngNABmd75Jh4lPagzEht1U=",
+      "start_time": "2026-10-22T11:29:28+08:00",
+      "duration_seconds": 2294,
+      "win": true,
+      "champion_key": "yone",
+      "champion_name": "封魔剑魂",
+      "kills": 3,
+      "deaths": 7,
+      "assists": 7,
+      "cs": 287,
+      "position": "TOP",
+      "queue_type": "SOLORANKED",
+      "queue_label": "Ranked Solo/Duo",
+      "game_map": "SUMMONERS_RIFT",
+      "kda_ratio": 1.43,
+      "cs_per_min": 7.5,
+      "op_score": 3.5,
+      "kill_participation": 26,
+      "source": "opgg-getgames",
+      "fetched_at": "2026-10-23T02:23:17.542948+00:00"
+    }
+  ]
+}
