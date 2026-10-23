@@ -353,6 +353,9 @@ lol-daily-report/
 -   GitHub Actions 的定时任务可能延迟，不应把启动时刻视为严格实时保证。
 -   提供 `workflow_dispatch` 手动触发。
 -   Artifact 建议保留 14 天。
+-   每日产物由 Actions 以 `output/<日期>` 分支创建 PR 并自动 squash 合并回
+    `main`；产物无变化时跳过。若仓库启用分支保护，需同时在仓库设置中开启
+    "Allow auto-merge"。
 -   采集失败时输出清晰错误日志；不得将错误页当作空对局列表。
 -   建议早间定时采集，并允许人工补跑，以覆盖数据源更新延迟。
 

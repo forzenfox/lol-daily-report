@@ -12,7 +12,8 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: lol-daily-report
@@ -55,6 +56,43 @@ jobs:
           echo "统计日期: ${target}"
           echo "TARGET_DATE=${target}" >> "$GITHUB_ENV"
           python src/main.py --date "${target}"
+
+      - name: 提交产物到仓库（PR 自动合并）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          branch="output/${TARGET_DATE}"
+
+          # 同名分支已存在时基于它追加提交（fast-forward），避免覆盖历史
+          git fetch origin "${branch}" >/dev/null 2>&1 || true
+          if git rev-parse --verify --quiet "origin/${branch}" >/dev/null; then
+            git checkout -B "${branch}" "origin/${branch}"
+          else
+            git checkout -B "${branch}" main
+          fi
+
+          git add output/
+          if git diff --cached --quiet; then
+            echo "产物无变化，跳过提交"
+            exit 0
+          fi
+
+          git commit -m "战报产物：${TARGET_DATE}"
+          git push origin "${branch}"
+
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "战报产物：${TARGET_DATE}" \
+            --body "每日战报自动生成（output/），由 Actions 自动合并。" \
+            || echo "PR 已存在，跳过创建"
+
+          # 优先排队自动合并（启用分支保护时等待检查）；未开启 auto-merge 时直接合并
+          gh pr merge "${branch}" --auto --squash --delete-branch \
+            || gh pr merge "${branch}" --squash --delete-branch
 
       - name: 上传产物
         if: always()
