@@ -62,6 +62,8 @@ def make_match(
     index: int = 0,
     own: ParticipantPerformance | None = None,
     opponent: ParticipantPerformance | None = None,
+    queue_type: str = "SOLORANKED",
+    game_map: str | None = "SUMMONERS_RIFT",
 ) -> NormalizedMatch:
     return NormalizedMatch(
         match_id=match_id,
@@ -75,9 +77,9 @@ def make_match(
         assists=1,
         cs=279,
         position="TOP",
-        queue_type="SOLORANKED",
+        queue_type=queue_type,
         queue_label="Ranked Solo/Duo",
-        game_map="SUMMONERS_RIFT",
+        game_map=game_map,
         kda_ratio=1.75,
         cs_per_min=9.9,
         op_score=4.8,
@@ -203,7 +205,7 @@ def test_main_logs_skip_for_empty_day(tmp_path: Path, monkeypatch, capsys) -> No
     captured = capsys.readouterr()
     assert code == 0
     assert "[SKIP]" in captured.out
-    assert "无对局" in captured.out
+    assert "无 5v5 排位对局" in captured.out
 
 
 def test_load_config_parses_accounts_and_defaults(tmp_path: Path) -> None:
@@ -270,18 +272,69 @@ def test_run_generates_markdown_and_json(tmp_path: Path) -> None:
     assert Path(account_result.image_path).name == "斗鱼丶胡凯利.png"
     markdown = Path(account_result.report_path or "").read_text(encoding="utf-8")
     assert "总场次：3" in markdown
-    assert "上分密码" in markdown
+    assert "战神C" in markdown
 
     payload = json.loads(Path(account_result.json_path or "").read_text(encoding="utf-8"))
     assert payload["account"] == "斗鱼丶胡凯利#2862"
     assert payload["day"] == "2026-10-20"
     assert payload["stats"]["total_games"] == 3
     assert payload["stats"]["win_rate"] == 66.7
-    assert [title["key"] for title in payload["titles"]] == ["climbing", "specialist"]
+    assert [title["key"] for title in payload["titles"]] == ["carry_god"]
     assert payload["matches"][0]["match_id"] == "m1"
     assert payload["matches"][0]["start_time"] == "2026-10-20T20:00:00+08:00"
     assert payload["source"]["url"] == "https://op.gg/en/lol/summoners/kr/example-2862"
     assert payload["complete"] is True
+
+
+def test_non_ranked_matches_are_excluded_from_report(tmp_path: Path) -> None:
+    collection = make_collection()
+    collection.matches.append(
+        make_match("aram", index=3, queue_type="ARAM", game_map="HOWLING_ABYSS")
+    )
+    renderer = FakeRenderer()
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="斗鱼丶胡凯利", riot_id="斗鱼丶胡凯利#2862"),)
+    )
+
+    result = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(collection),
+        output_dir=tmp_path,
+        renderer=renderer,
+    )
+
+    payload = json.loads(Path(result.accounts[0].json_path or "").read_text(encoding="utf-8"))
+    assert payload["stats"]["total_games"] == 3
+    assert payload["stats"]["win_rate"] == 66.7
+    assert [match["match_id"] for match in payload["matches"]] == ["m1", "m2", "m3"]
+    assert len(renderer.details) == 3
+    markdown = Path(result.accounts[0].report_path or "").read_text(encoding="utf-8")
+    assert "总场次：3" in markdown
+
+
+def test_day_with_only_non_ranked_matches_is_skipped(tmp_path: Path) -> None:
+    collection = make_empty_collection()
+    collection.matches = [make_match("aram", queue_type="ARAM", game_map="HOWLING_ABYSS")]
+    renderer = FakeRenderer()
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="斗鱼丶胡凯利", riot_id="斗鱼丶胡凯利#2862"),)
+    )
+
+    result = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(collection),
+        output_dir=tmp_path,
+        renderer=renderer,
+    )
+
+    account_result = result.accounts[0]
+    assert account_result.ok is True
+    assert account_result.skipped is True
+    assert account_result.matches == 0
+    assert not (tmp_path / "2026-10-20").exists()
+    assert renderer.details == []
 
 
 def test_disabled_accounts_are_skipped(tmp_path: Path) -> None:

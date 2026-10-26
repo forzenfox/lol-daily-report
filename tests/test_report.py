@@ -180,13 +180,19 @@ def test_sample_insufficient_note() -> None:
 
 def test_renders_titles_with_reasons() -> None:
     stats = compute_daily_stats([make_match("m1"), make_match("m2"), make_match("m3")], 1)
-    titles = [Title(key="climbing", name="上分密码", reason="3 场 3 胜 0 负，胜率 100.0%")]
+    titles = [
+        Title(
+            key="carry_god",
+            name="战神C",
+            reason="5 胜 2 负（71.4%），对位可比胜场 4 场，其中 3 场 KDA 高于对位（75.0%）",
+        )
+    ]
 
     text = render_markdown(stats, make_context(), titles=titles)
 
     assert "## 趣味称号" in text
-    assert "上分密码" in text
-    assert "100.0%" in text
+    assert "战神C" in text
+    assert "75.0%" in text
 
 
 def test_details_section_lists_row_values() -> None:

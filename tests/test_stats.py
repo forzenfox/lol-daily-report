@@ -6,7 +6,12 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from providers.opgg import NormalizedMatch
-from stats import ChampionStats, DailyStats, compute_daily_stats
+from stats import (
+    ChampionStats,
+    DailyStats,
+    compute_daily_stats,
+    select_report_matches,
+)
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -23,6 +28,8 @@ def make_match(
     cs: int = 200,
     duration: int = 1800,
     start: datetime | None = None,
+    queue_type: str = "SOLORANKED",
+    game_map: str | None = "SUMMONERS_RIFT",
 ) -> NormalizedMatch:
     return NormalizedMatch(
         match_id=match_id,
@@ -36,9 +43,9 @@ def make_match(
         assists=assists,
         cs=cs,
         position="TOP",
-        queue_type="SOLORANKED",
+        queue_type=queue_type,
         queue_label="Ranked Solo/Duo",
-        game_map="SUMMONERS_RIFT",
+        game_map=game_map,
         kda_ratio=None,
         cs_per_min=None,
         op_score=None,
@@ -159,3 +166,28 @@ def test_zero_duration_yields_no_cs_per_min() -> None:
 
     assert stats.cs_per_min is None
     assert stats.avg_duration_seconds == 0
+
+
+def test_select_report_matches_keeps_only_5v5_ranked() -> None:
+    matches = [
+        make_match("ranked"),
+        make_match("unknown-map", game_map=None),
+        make_match("flex", queue_type="FLEXRANKED"),
+        make_match("normal", queue_type="NORMAL"),
+        make_match("aram", queue_type="ARAM", game_map="HOWLING_ABYSS"),
+        make_match("arena", queue_type="ARENA", game_map="ARENA"),
+    ]
+
+    selected = select_report_matches(matches)
+
+    assert [match.match_id for match in selected] == ["ranked", "unknown-map"]
+
+
+def test_select_report_matches_deduplicates_by_match_id() -> None:
+    matches = [
+        make_match("m1"),
+        make_match("m1"),
+        make_match("aram", queue_type="ARAM", game_map="HOWLING_ABYSS"),
+    ]
+
+    assert [match.match_id for match in select_report_matches(matches)] == ["m1"]

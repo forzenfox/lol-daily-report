@@ -31,7 +31,7 @@ from providers.opgg import (
 )
 from render_image import ImageOptions, save_report_image
 from report import ReportContext, render_markdown, write_report
-from stats import DailyStats, compute_daily_stats
+from stats import DailyStats, compute_daily_stats, select_report_matches
 from titles import Title, evaluate_titles
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
@@ -397,12 +397,14 @@ def run(
         try:
             provider = factory(account)
             collection = provider.collect_day(account.riot_id, day, region=account.region)
-            if not collection.matches:
-                # 当日无对局：不创建目录、不产出任何文件，仅记录跳过状态供日志输出。
+            report_matches = select_report_matches(collection.matches)
+            if not report_matches:
+                # 当日无 5v5 排位对局：不创建目录、不产出任何文件，仅记录跳过状态供日志输出。
                 result.accounts.append(
                     AccountResult(account=account.riot_id, ok=True, skipped=True)
                 )
                 continue
+            collection = replace(collection, matches=report_matches)
             catalog = _ensure_catalog(config, catalog, collection, active_renderer, champion_names)
             stats = compute_daily_stats(
                 collection.matches, minimum_games=config.minimum_games_for_judgement
@@ -497,7 +499,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for account in result.accounts:
         if account.skipped:
-            print(f"[SKIP] {account.account}: 当日无对局，跳过产物生成")
+            print(f"[SKIP] {account.account}: 当日无 5v5 排位对局，跳过产物生成")
         elif account.ok:
             suffix = ""
             if account.image_path:

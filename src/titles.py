@@ -4,25 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import pairwise
 
 from providers.opgg import NormalizedMatch
-from stats import ChampionStats, DailyStats
+from stats import DailyStats, unique_matches
 
 
 @dataclass(frozen=True)
 class TitleRules:
-    """称号阈值；运营可按试运行结果调整。"""
+    """称号阈值；样本门槛与日报配置保持一致。"""
 
     minimum_games: int = 3
-    climbing_min_games: int = 3
-    climbing_win_rate: float = 60.0
-    workhorse_min_games: int = 10
-    rollercoaster_min_games: int = 4
-    rollercoaster_min_alternations: int = 3
-    philanthropist_avg_deaths: float = 6.0
-    specialist_min_games: int = 3
-    specialist_win_rate: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -32,22 +23,42 @@ class Title:
     reason: str
 
 
-def _alternations(matches: Sequence[NormalizedMatch]) -> int:
-    ordered = sorted(matches, key=lambda match: match.start_time)
-    results = [match.win for match in ordered]
-    return sum(1 for left, right in pairwise(results) if left != right)
+def _kda(kills: int, deaths: int, assists: int) -> float:
+    """未取整 KDA，仅用于对位比较。"""
+    return (kills + assists) / max(deaths, 1)
 
 
-def _best_specialist(stats: DailyStats, rules: TitleRules) -> ChampionStats | None:
-    candidates = [
-        champion
-        for champion in stats.champions
-        if champion.games >= rules.specialist_min_games
-        and champion.win_rate >= rules.specialist_win_rate
-    ]
-    if not candidates:
+def _lane_kda(match: NormalizedMatch) -> tuple[float, float] | None:
+    """返回本人与对位的未取整 KDA；无对位时返回 None。"""
+    opponent = match.lane_opponent
+    if opponent is None:
         return None
-    return max(candidates, key=lambda champion: (champion.games, champion.win_rate, champion.kda))
+    return (
+        _kda(match.kills, match.deaths, match.assists),
+        _kda(opponent.kills, opponent.deaths, opponent.assists),
+    )
+
+
+def _lane_comparison(matches: Sequence[NormalizedMatch]) -> tuple[int, int, int]:
+    """返回可比胜场数、KDA 低于对位局数、KDA 高于对位局数。"""
+    comparable = lower = higher = 0
+    for match in unique_matches(matches):
+        if not match.win:
+            continue
+        pair = _lane_kda(match)
+        if pair is None:
+            continue
+        comparable += 1
+        own, rival = pair
+        if own < rival:
+            lower += 1
+        elif own > rival:
+            higher += 1
+    return comparable, lower, higher
+
+
+def _win_rate(stats: DailyStats) -> float:
+    return stats.win_rate if stats.win_rate is not None else 0.0
 
 
 def evaluate_titles(
@@ -55,68 +66,41 @@ def evaluate_titles(
     matches: Sequence[NormalizedMatch],
     rules: TitleRules | None = None,
 ) -> list[Title]:
-    """按固定顺序返回触发的称号；样本不足时一律不触发。"""
+    """按 PRD 8.2 返回互斥称号；调用方需传入日报口径（仅 5v5 排位）对局。"""
     active = rules or TitleRules()
     if stats.total_games < active.minimum_games:
         return []
 
-    titles: list[Title] = []
+    record = f"{stats.wins} 胜 {stats.losses} 负（{_win_rate(stats):.1f}%）"
 
-    if (
-        stats.total_games >= active.climbing_min_games
-        and stats.win_rate is not None
-        and stats.win_rate >= active.climbing_win_rate
-    ):
-        titles.append(
+    if stats.wins < stats.losses:
+        return [Title(key="valley_terror", name="峡谷鬼见愁", reason=record)]
+
+    if stats.wins == stats.losses:
+        return []
+
+    comparable, lower, higher = _lane_comparison(matches)
+    if comparable == 0:
+        return []
+
+    if lower * 2 > comparable:
+        return [
             Title(
-                key="climbing",
-                name="上分密码",
-                reason=f"{stats.total_games} 场 {stats.wins} 胜 {stats.losses} 负，"
-                f"胜率 {stats.win_rate:.1f}%",
+                key="negative_kda_climber",
+                name="负战绩上分第一人",
+                reason=f"{record}，对位可比胜场 {comparable} 场，"
+                f"其中 {lower} 场 KDA 低于对位（{lower / comparable * 100:.1f}%）",
             )
-        )
+        ]
 
-    if stats.total_games >= active.workhorse_min_games:
-        titles.append(
+    if higher * 2 > comparable:
+        return [
             Title(
-                key="workhorse",
-                name="峡谷劳模",
-                reason=f"当日 {stats.total_games} 场",
+                key="carry_god",
+                name="战神C",
+                reason=f"{record}，对位可比胜场 {comparable} 场，"
+                f"其中 {higher} 场 KDA 高于对位（{higher / comparable * 100:.1f}%）",
             )
-        )
+        ]
 
-    alternations = _alternations(matches)
-    if (
-        stats.total_games >= active.rollercoaster_min_games
-        and alternations >= active.rollercoaster_min_alternations
-    ):
-        titles.append(
-            Title(
-                key="rollercoaster",
-                name="状态过山车",
-                reason=f"{stats.total_games} 场中出现 {alternations} 次胜负交替",
-            )
-        )
-
-    if stats.avg_deaths is not None and stats.avg_deaths >= active.philanthropist_avg_deaths:
-        titles.append(
-            Title(
-                key="philanthropist",
-                name="峡谷慈善家",
-                reason=f"场均死亡 {stats.avg_deaths:.1f}"
-                f"（阈值 {active.philanthropist_avg_deaths:.1f}）",
-            )
-        )
-
-    specialist = _best_specialist(stats, active)
-    if specialist is not None:
-        titles.append(
-            Title(
-                key="specialist",
-                name=f"英雄专精 · {specialist.champion_name}",
-                reason=f"{specialist.champion_name} {specialist.games} 场，"
-                f"胜率 {specialist.win_rate:.1f}%，KDA {specialist.kda:.2f}",
-            )
-        )
-
-    return titles
+    return []

@@ -237,7 +237,13 @@ def test_render_handles_long_account_and_many_champions() -> None:
 
 def test_render_with_titles_does_not_crash() -> None:
     stats = compute_daily_stats([make_match("m1")], minimum_games=1)
-    titles = [Title(key="climbing", name="上分密码", reason="3 场 3 胜 0 负，胜率 100.0%")]
+    titles = [
+        Title(
+            key="carry_god",
+            name="战神C",
+            reason="5 胜 2 负（71.4%），对位可比胜场 4 场，其中 3 场 KDA 高于对位（75.0%）",
+        )
+    ]
 
     image = render_report_image(stats, make_context(), titles=titles, options=small_options())
 
@@ -305,7 +311,7 @@ def test_wrap_text_keeps_percentage_token_intact() -> None:
     font = find_font(24, [font_path])
     canvas = Image.new("RGB", (10, 10))
     draw = ImageDraw.Draw(canvas)
-    text = "上分密码：7 场 5 胜 2 负，胜率 71.4%"
+    text = "战神C：7 场 5 胜 2 负，胜率 71.4%"
 
     lines = wrap_text(text, font, 200, draw)
 

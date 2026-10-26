@@ -40,8 +40,34 @@ class DailyStats:
     sample_sufficient: bool
 
 
+REPORT_QUEUE_TYPE = "SOLORANKED"
+REPORT_GAME_MAP = "SUMMONERS_RIFT"
+
+
 def _kda(kills: int, deaths: int, assists: int) -> float:
     return round((kills + assists) / max(deaths, 1), 2)
+
+
+def unique_matches(matches: Iterable[NormalizedMatch]) -> list[NormalizedMatch]:
+    """按 match_id 去重，保留首次出现。"""
+    result: list[NormalizedMatch] = []
+    seen: set[str] = set()
+    for match in matches:
+        if match.match_id in seen:
+            continue
+        seen.add(match.match_id)
+        result.append(match)
+    return result
+
+
+def is_report_match(match: NormalizedMatch) -> bool:
+    """日报口径：仅 5v5 排位（单双排）对局；缺少地图时按队列类型判定。"""
+    return match.queue_type == REPORT_QUEUE_TYPE and match.game_map in (None, REPORT_GAME_MAP)
+
+
+def select_report_matches(matches: Iterable[NormalizedMatch]) -> list[NormalizedMatch]:
+    """按日报口径筛选并去重：只保留 5v5 排位对局。"""
+    return unique_matches(match for match in matches if is_report_match(match))
 
 
 def _champion_stats(matches: list[NormalizedMatch]) -> list[ChampionStats]:
@@ -76,14 +102,7 @@ def _champion_stats(matches: list[NormalizedMatch]) -> list[ChampionStats]:
 
 def compute_daily_stats(matches: Iterable[NormalizedMatch], minimum_games: int = 3) -> DailyStats:
     """按 PRD 口径计算当日统计；同一 match_id 只统计一次。"""
-    unique: list[NormalizedMatch] = []
-    seen: set[str] = set()
-    for match in matches:
-        if match.match_id in seen:
-            continue
-        seen.add(match.match_id)
-        unique.append(match)
-
+    unique = unique_matches(matches)
     total = len(unique)
     if total == 0:
         return DailyStats(
