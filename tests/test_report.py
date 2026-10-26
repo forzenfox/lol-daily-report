@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-from providers.opgg import NormalizedMatch
+from match_details import compute_match_details
+from providers.opgg import NormalizedMatch, ParticipantPerformance
 from report import ReportContext, render_markdown, write_report
 from stats import compute_daily_stats
 from titles import Title
@@ -24,6 +25,10 @@ def make_match(
     assists: int = 3,
     cs: int = 200,
     duration: int = 1800,
+    cs_per_min: float | None = None,
+    op_score_rank: int | None = None,
+    own: ParticipantPerformance | None = None,
+    opponent: ParticipantPerformance | None = None,
 ) -> NormalizedMatch:
     return NormalizedMatch(
         match_id=match_id,
@@ -41,11 +46,43 @@ def make_match(
         queue_label="Ranked Solo/Duo",
         game_map="SUMMONERS_RIFT",
         kda_ratio=None,
-        cs_per_min=None,
+        cs_per_min=cs_per_min,
         op_score=None,
         kill_participation=None,
         source="opgg-getgames",
         fetched_at=datetime.now(UTC),
+        op_score_rank=op_score_rank,
+        own_performance=own,
+        lane_opponent=opponent,
+    )
+
+
+def make_performance(
+    *,
+    champion_name: str = "Darius",
+    team_key: str = "RED",
+    kills: int = 2,
+    deaths: int = 5,
+    assists: int = 3,
+    cs: int = 184,
+) -> ParticipantPerformance:
+    return ParticipantPerformance(
+        summoner_name="Opponent#KR1",
+        champion_key=champion_name.lower(),
+        champion_name=champion_name,
+        position="TOP",
+        team_key=team_key,
+        kills=kills,
+        deaths=deaths,
+        assists=assists,
+        cs=cs,
+        gold_earned=8000,
+        damage_to_champions=12000,
+        damage_taken=10000,
+        vision_score=30,
+        team_kills=10,
+        op_score=4.1,
+        win=False,
     )
 
 
@@ -150,6 +187,87 @@ def test_renders_titles_with_reasons() -> None:
     assert "## 趣味称号" in text
     assert "上分密码" in text
     assert "100.0%" in text
+
+
+def test_details_section_lists_row_values() -> None:
+    own = make_performance(
+        champion_name="Yorick", team_key="BLUE", kills=6, deaths=4, assists=1, cs=285
+    )
+    match = make_match(
+        "m1",
+        kills=6,
+        deaths=4,
+        assists=1,
+        cs=285,
+        cs_per_min=9.5,
+        op_score_rank=6,
+        own=own,
+        opponent=make_performance(),
+    )
+    stats = compute_daily_stats([match], minimum_games=1)
+    details = compute_match_details([match])
+
+    text = render_markdown(stats, make_context(), details=details)
+
+    assert "## 对局明细" in text
+    assert "| # | 时间 | 英雄 | 位置 | 结果 | K/D/A | 补刀 | 分均补刀 | OP排名 | 对位 |" in text
+    assert "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |" in text
+    assert (
+        "| 1 | 20:00 | Yorick | 上单 | 胜 | 6/4/1 | 285 | 9.5 | 6/10 | Darius 2/5/3 · 184 补刀 |"
+        in text
+    )
+
+
+def test_details_section_between_daily_and_champion_sections() -> None:
+    match = make_match("m1", own=make_performance(), opponent=make_performance())
+    stats = compute_daily_stats([match], minimum_games=1)
+    details = compute_match_details([match])
+
+    text = render_markdown(stats, make_context(), details=details)
+
+    assert text.index("## 今日战绩") < text.index("## 对局明细") < text.index("## 英雄表现")
+
+
+def test_details_row_uses_dash_without_opponent_or_rank() -> None:
+    match = make_match("m1", own=make_performance())
+    stats = compute_daily_stats([match], minimum_games=1)
+    details = compute_match_details([match])
+
+    text = render_markdown(stats, make_context(), details=details)
+
+    assert "| 1 | 20:00 | Yorick | 上单 | 胜 | 5/2/3 | 200 | — | — | — |" in text
+
+
+def test_details_rows_numbered_and_show_loss() -> None:
+    first = make_match("m1", win=True)
+    second = make_match("m2", win=False, champion_name="Darius")
+    stats = compute_daily_stats([first, second], minimum_games=1)
+    details = compute_match_details([first, second])
+
+    text = render_markdown(stats, make_context(), details=details)
+
+    assert "| 1 | 20:00 | Yorick | 上单 | 胜 |" in text
+    assert "| 2 | 20:00 | Darius | 上单 | 负 |" in text
+
+
+def test_details_note_added_to_data_notes() -> None:
+    match = make_match("m1", own=make_performance(), opponent=make_performance())
+    stats = compute_daily_stats([match], minimum_games=1)
+    details = compute_match_details([match])
+
+    text = render_markdown(stats, make_context(), details=details)
+
+    assert "## 数据说明" in text
+    assert "对位按同位置、双方队伍匹配；非 5v5 或位置缺失时展示为 —。" in text
+
+
+def test_empty_details_omit_details_section() -> None:
+    stats = compute_daily_stats([make_match("m1")], minimum_games=1)
+
+    text = render_markdown(stats, make_context())
+
+    assert "## 对局明细" not in text
+    assert "对位按同位置" not in text
 
 
 def test_write_report_uses_utf8_and_lf(tmp_path) -> None:

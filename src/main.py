@@ -6,7 +6,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -22,7 +22,13 @@ from champions import (
     load_catalog,
     refresh_assets,
 )
-from providers.opgg import DayCollection, NormalizedMatch, OpggProvider
+from match_details import MatchDetail, compute_match_details
+from providers.opgg import (
+    DayCollection,
+    NormalizedMatch,
+    OpggProvider,
+    ParticipantPerformance,
+)
 from render_image import ImageOptions, save_report_image
 from report import ReportContext, render_markdown, write_report
 from stats import DailyStats, compute_daily_stats
@@ -49,6 +55,7 @@ class RendererLike(Protocol):
         context: ReportContext,
         titles: list[Title] | tuple[Title, ...],
         avatars: dict[str, Path] | None = None,
+        details: Sequence[MatchDetail] = (),
     ) -> Path: ...
 
 
@@ -74,6 +81,7 @@ class OpggImageRenderer:
         context: ReportContext,
         titles: list[Title] | tuple[Title, ...],
         avatars: dict[str, Path] | None = None,
+        details: Sequence[MatchDetail] = (),
     ) -> Path:
         avatar_map = dict(avatars or {})
         if self.catalog is not None:
@@ -87,7 +95,13 @@ class OpggImageRenderer:
                 if avatar is not None:
                     avatar_map[champion.champion_key] = avatar
         return save_report_image(
-            path, stats, context, titles, options=self.options, avatars=avatar_map
+            path,
+            stats,
+            context,
+            titles,
+            options=self.options,
+            avatars=avatar_map,
+            details=details,
         )
 
 
@@ -115,6 +129,7 @@ class AccountResult:
     account: str
     ok: bool
     matches: int = 0
+    skipped: bool = False
     report_path: str | None = None
     json_path: str | None = None
     image_path: str | None = None
@@ -169,6 +184,29 @@ def _safe_filename(text: str) -> str:
     return cleaned or "account"
 
 
+def _performance_payload(performance: ParticipantPerformance | None) -> dict[str, Any] | None:
+    if performance is None:
+        return None
+    return {
+        "summoner_name": performance.summoner_name,
+        "champion_key": performance.champion_key,
+        "champion_name": performance.champion_name,
+        "position": performance.position,
+        "team_key": performance.team_key,
+        "kills": performance.kills,
+        "deaths": performance.deaths,
+        "assists": performance.assists,
+        "cs": performance.cs,
+        "gold_earned": performance.gold_earned,
+        "damage_to_champions": performance.damage_to_champions,
+        "damage_taken": performance.damage_taken,
+        "vision_score": performance.vision_score,
+        "team_kills": performance.team_kills,
+        "op_score": performance.op_score,
+        "win": performance.win,
+    }
+
+
 def _match_payload(match: NormalizedMatch) -> dict[str, Any]:
     return {
         "match_id": match.match_id,
@@ -188,7 +226,9 @@ def _match_payload(match: NormalizedMatch) -> dict[str, Any]:
         "kda_ratio": match.kda_ratio,
         "cs_per_min": match.cs_per_min,
         "op_score": match.op_score,
+        "op_score_rank": match.op_score_rank,
         "kill_participation": match.kill_participation,
+        "lane_opponent": _performance_payload(match.lane_opponent),
         "source": match.source,
         "fetched_at": match.fetched_at.isoformat(),
     }
@@ -286,37 +326,49 @@ def _ensure_catalog(
     champion_names: dict[str, str],
 ) -> ChampionCatalog | None:
     """缺少英雄中文名或头像时自动刷新一次，并回填到对局与渲染器。"""
-    if not config.auto_update_champions:
-        return catalog
-
     needed = tuple(match.champion_key for match in collection.matches)
     refreshed = catalog
-    if catalog is None:
-        try:
-            refreshed = refresh_assets(DEFAULT_CHAMPION_CATALOG, DATA_AVATAR_DIR).catalog
-        except Exception:  # noqa: BLE001 - 资源更新失败不阻断战报
-            return None
-    elif needed:
-        refreshed = ensure_assets(
-            catalog,
-            needed,
-            avatars_dir=DATA_AVATAR_DIR,
-            marker_path=CHAMPION_REFRESH_MARKER,
-            refresher=lambda: refresh_assets(DEFAULT_CHAMPION_CATALOG, DATA_AVATAR_DIR).catalog,
-        )
+    if config.auto_update_champions:
+        if catalog is None:
+            try:
+                refreshed = refresh_assets(DEFAULT_CHAMPION_CATALOG, DATA_AVATAR_DIR).catalog
+            except Exception:  # noqa: BLE001 - 资源更新失败不阻断战报
+                refreshed = None
+        elif needed:
+            refreshed = ensure_assets(
+                catalog,
+                needed,
+                avatars_dir=DATA_AVATAR_DIR,
+                marker_path=CHAMPION_REFRESH_MARKER,
+                refresher=lambda: refresh_assets(DEFAULT_CHAMPION_CATALOG, DATA_AVATAR_DIR).catalog,
+            )
 
-    if refreshed is not catalog:
+    if refreshed is not None:
+        # 无论是否发生刷新，都对本人与对位英雄名做一次本地化回填。
         champion_names.update({entry.key: entry.name for entry in refreshed})
         collection.matches = [
             replace(
                 match,
                 champion_name=refreshed.name_for(match.champion_key, match.champion_name),
+                lane_opponent=_localize_performance(refreshed, match.lane_opponent),
+                own_performance=_localize_performance(refreshed, match.own_performance),
             )
             for match in collection.matches
         ]
-        if isinstance(renderer, OpggImageRenderer):
+        if refreshed is not catalog and isinstance(renderer, OpggImageRenderer):
             renderer.catalog = refreshed
     return refreshed
+
+
+def _localize_performance(
+    catalog: ChampionCatalog, performance: ParticipantPerformance | None
+) -> ParticipantPerformance | None:
+    if performance is None:
+        return None
+    return replace(
+        performance,
+        champion_name=catalog.name_for(performance.champion_key, performance.champion_name),
+    )
 
 
 def run(
@@ -345,11 +397,18 @@ def run(
         try:
             provider = factory(account)
             collection = provider.collect_day(account.riot_id, day, region=account.region)
+            if not collection.matches:
+                # 当日无对局：不创建目录、不产出任何文件，仅记录跳过状态供日志输出。
+                result.accounts.append(
+                    AccountResult(account=account.riot_id, ok=True, skipped=True)
+                )
+                continue
             catalog = _ensure_catalog(config, catalog, collection, active_renderer, champion_names)
             stats = compute_daily_stats(
                 collection.matches, minimum_games=config.minimum_games_for_judgement
             )
             titles = evaluate_titles(stats, collection.matches)
+            details = compute_match_details(collection.matches)
 
             fetched_at = (
                 collection.matches[0].fetched_at
@@ -369,7 +428,7 @@ def run(
                 fetched_at=fetched_at,
                 timezone_label=config.timezone,
             )
-            content = render_markdown(stats, context, titles)
+            content = render_markdown(stats, context, titles, details=details)
             safe_name = _safe_filename(account.display_name)
             report_path = write_report(target_dir / f"{safe_name}.md", content)
             json_path = _write_json(
@@ -383,7 +442,13 @@ def run(
                 image_name = f"{safe_name}.png"
                 try:
                     image_path = str(
-                        active_renderer.render(target_dir / image_name, stats, context, titles)
+                        active_renderer.render(
+                            target_dir / image_name,
+                            stats,
+                            context,
+                            titles,
+                            details=details,
+                        )
                     )
                 except Exception as exc:  # noqa: BLE001 - 图片失败不阻断文案产物
                     image_error = f"{type(exc).__name__}: {exc}"
@@ -431,7 +496,9 @@ def main(argv: list[str] | None = None) -> int:
     result = run(config, day, output_dir=args.output_dir)
 
     for account in result.accounts:
-        if account.ok:
+        if account.skipped:
+            print(f"[SKIP] {account.account}: 当日无对局，跳过产物生成")
+        elif account.ok:
             suffix = ""
             if account.image_path:
                 suffix = f" | 图片 {account.image_path}"

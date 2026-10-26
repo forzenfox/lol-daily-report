@@ -9,11 +9,13 @@ from zoneinfo import ZoneInfo
 import pytest
 from PIL import Image, ImageDraw
 
-from providers.opgg import NormalizedMatch
+from match_details import compute_match_details
+from providers.opgg import NormalizedMatch, ParticipantPerformance
 from render_image import (
     DEFAULT_FONT_CANDIDATES,
     ImageOptions,
     ImageRenderError,
+    _format_radar_value,
     find_font,
     format_champion_kda,
     format_report_title,
@@ -28,6 +30,63 @@ from titles import Title
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
+def make_performance(
+    *,
+    champion_name: str = "Darius",
+    kills: int = 2,
+    deaths: int = 5,
+    assists: int = 3,
+    cs: int = 184,
+    gold: int = 8000,
+    damage: int = 12000,
+    vision: int = 30,
+    team_kills: int = 10,
+) -> ParticipantPerformance:
+    return ParticipantPerformance(
+        summoner_name="Opponent#KR1",
+        champion_key=champion_name.lower(),
+        champion_name=champion_name,
+        position="TOP",
+        team_key="RED",
+        kills=kills,
+        deaths=deaths,
+        assists=assists,
+        cs=cs,
+        gold_earned=gold,
+        damage_to_champions=damage,
+        damage_taken=10000,
+        vision_score=vision,
+        team_kills=team_kills,
+        team_damage_to_champions=80000,
+        team_damage_taken=70000,
+        op_score=4.1,
+        win=False,
+    )
+
+
+def own_performance() -> ParticipantPerformance:
+    return ParticipantPerformance(
+        summoner_name="斗鱼丶胡凯利#2862",
+        champion_key="yorick",
+        champion_name="Yorick",
+        position="TOP",
+        team_key="BLUE",
+        kills=6,
+        deaths=4,
+        assists=1,
+        cs=285,
+        gold_earned=9000,
+        damage_to_champions=15000,
+        damage_taken=14000,
+        vision_score=20,
+        team_kills=14,
+        team_damage_to_champions=60000,
+        team_damage_taken=70000,
+        op_score=4.8,
+        win=True,
+    )
+
+
 def make_match(
     match_id: str,
     *,
@@ -35,6 +94,9 @@ def make_match(
     champion_key: str = "yorick",
     champion_name: str = "Yorick",
     index: int = 0,
+    op_score_rank: int | None = None,
+    own: ParticipantPerformance | None = None,
+    opponent: ParticipantPerformance | None = None,
 ) -> NormalizedMatch:
     return NormalizedMatch(
         match_id=match_id,
@@ -57,6 +119,9 @@ def make_match(
         kill_participation=21,
         source="opgg-getgames",
         fetched_at=datetime.now(UTC),
+        op_score_rank=op_score_rank,
+        own_performance=own,
+        lane_opponent=opponent,
     )
 
 
@@ -270,3 +335,124 @@ def test_missing_font_raises_render_error(tmp_path: Path) -> None:
 
     with pytest.raises(ImageRenderError):
         render_report_image(stats, make_context(), options=options)
+
+
+def test_render_with_details_grows_canvas_and_draws_below_base() -> None:
+    matches = [
+        make_match(
+            "m1",
+            own=own_performance(),
+            opponent=make_performance(champion_name="Darius"),
+            op_score_rank=6,
+        ),
+        make_match(
+            "m2",
+            win=False,
+            index=1,
+            own=own_performance(),
+            opponent=make_performance(champion_name="Garen", kills=3, deaths=2),
+            op_score_rank=8,
+        ),
+    ]
+    details = compute_match_details(matches)
+    stats = compute_daily_stats(matches, minimum_games=1)
+
+    image = render_report_image(stats, make_context(), options=small_options(), details=details)
+
+    assert image.width == 540
+    assert image.height > 960
+    below_base = image.crop((0, 960, image.width, image.height))
+    colors = below_base.getcolors(maxcolors=1_000_000)
+    assert colors is not None
+    assert len(colors) > 1
+
+
+def test_render_with_empty_details_keeps_configured_size() -> None:
+    stats = compute_daily_stats([make_match("m1")], minimum_games=1)
+
+    image = render_report_image(stats, make_context(), options=small_options(), details=())
+
+    assert image.size == (540, 960)
+
+
+def test_render_details_without_lane_opponent_does_not_crash() -> None:
+    matches = [
+        make_match(
+            f"m{index}",
+            champion_key=f"champ{index}",
+            champion_name=f"Champion{index}",
+            index=index,
+            own=own_performance(),
+        )
+        for index in range(5)
+    ]
+    details = compute_match_details(matches)
+    stats = compute_daily_stats(matches, minimum_games=1)
+
+    image = render_report_image(stats, make_context(), options=small_options(), details=details)
+
+    assert image.width == 540
+    assert image.height > 960
+    below_base = image.crop((0, 960, image.width, image.height))
+    colors = below_base.getcolors(maxcolors=1_000_000)
+    assert colors is not None
+    assert len(colors) > 1
+
+
+def test_save_report_image_writes_png_with_details(tmp_path: Path) -> None:
+    matches = [
+        make_match("m1", own=own_performance(), opponent=make_performance(), op_score_rank=6)
+    ]
+    details = compute_match_details(matches)
+    stats = compute_daily_stats(matches, minimum_games=1)
+
+    path = save_report_image(
+        tmp_path / "details" / "report.png",
+        stats,
+        make_context(),
+        options=small_options(),
+        details=details,
+    )
+
+    assert path.exists()
+    with Image.open(path) as image:
+        assert image.format == "PNG"
+        assert image.width == 540
+        assert image.height > 960
+
+
+def test_format_radar_value_keeps_unit_on_label_only() -> None:
+    # 参照图：数值只保留数字，% 或 /min 由左右两侧的标签承载。
+    assert _format_radar_value(0, 8.27) == "8.27"
+    assert _format_radar_value(1, 11.0) == "11.0"
+    assert _format_radar_value(2, 156.59) == "156.59"
+    assert _format_radar_value(5, 21.59) == "21.59"
+
+
+def test_each_lane_radar_takes_its_own_full_width_row() -> None:
+    first = make_match(
+        "m1", own=own_performance(), opponent=make_performance(champion_name="Darius")
+    )
+    second = make_match(
+        "m2",
+        index=1,
+        own=own_performance(),
+        opponent=make_performance(champion_name="Garen"),
+    )
+    context = make_context()
+
+    one = render_report_image(
+        compute_daily_stats([first], minimum_games=1),
+        context,
+        options=small_options(),
+        details=compute_match_details([first]),
+    )
+    two = render_report_image(
+        compute_daily_stats([first, second], minimum_games=1),
+        context,
+        options=small_options(),
+        details=compute_match_details([first, second]),
+    )
+
+    # 参照图的单场布局（左数值 + 中雷达 + 右数值）独占一行，第二场必须继续加高。
+    assert two.height > one.height

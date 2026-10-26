@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+from match_details import MatchDetail, position_label
 from stats import DailyStats
 from titles import Title
 
@@ -41,7 +43,9 @@ def _fmt_window(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%d %H:%M")
 
 
-def _format_notes(stats: DailyStats, context: ReportContext) -> list[str]:
+def _format_notes(
+    stats: DailyStats, context: ReportContext, *, has_details: bool = False
+) -> list[str]:
     notes: list[str] = []
     if stats.total_games and not stats.sample_sufficient:
         notes.append(
@@ -55,12 +59,51 @@ def _format_notes(stats: DailyStats, context: ReportContext) -> list[str]:
         notes.append(f"- 采集告警：{label}。")
     if context.source_url:
         notes.append(f"- 数据来源链接：{context.source_url}")
+    if has_details:
+        notes.append("- 对位按同位置、双方队伍匹配；非 5v5 或位置缺失时展示为 —。")
     notes.append(f"- 数据来源：{context.source_label}，采集后经人工审核再发布。")
     return notes
 
 
+def _fmt_cs_per_min(value: float | None) -> str:
+    return f"{value:.1f}" if value is not None else "—"
+
+
+def _fmt_lane_opponent(detail: MatchDetail) -> str:
+    opponent = detail.opponent
+    if opponent is None:
+        return "—"
+    return (
+        f"{opponent.champion_name} {opponent.kills}/{opponent.deaths}/{opponent.assists}"
+        f" · {opponent.cs} 补刀"
+    )
+
+
+def _format_details(details: Sequence[MatchDetail]) -> list[str]:
+    lines: list[str] = [
+        "## 对局明细",
+        "",
+        "| # | 时间 | 英雄 | 位置 | 结果 | K/D/A | 补刀 | 分均补刀 | OP排名 | 对位 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for index, detail in enumerate(details, start=1):
+        match = detail.match
+        rank = f"{match.op_score_rank}/10" if match.op_score_rank is not None else "—"
+        lines.append(
+            f"| {index} | {match.start_time.strftime('%H:%M')} | {match.champion_name} | "
+            f"{position_label(match.position)} | {'胜' if match.win else '负'} | "
+            f"{match.kills}/{match.deaths}/{match.assists} | {match.cs} | "
+            f"{_fmt_cs_per_min(match.cs_per_min)} | {rank} | {_fmt_lane_opponent(detail)} |"
+        )
+    lines.append("")
+    return lines
+
+
 def render_markdown(
-    stats: DailyStats, context: ReportContext, titles: list[Title] | tuple[Title, ...] = ()
+    stats: DailyStats,
+    context: ReportContext,
+    titles: list[Title] | tuple[Title, ...] = (),
+    details: Sequence[MatchDetail] = (),
 ) -> str:
     """渲染 Markdown 战报；无对局时明确说明，不输出误导性指标。"""
     window_label = (
@@ -99,6 +142,9 @@ def render_markdown(
             lines.append(f"- 场均补刀：{stats.avg_cs:.1f}（{cs_minute}/分钟）")
         lines.append("")
 
+    if details:
+        lines.extend(_format_details(details))
+
     if stats.champions:
         lines.extend(
             [
@@ -124,7 +170,7 @@ def render_markdown(
         lines.append("")
 
     lines.extend(["## 数据说明", ""])
-    lines.extend(_format_notes(stats, context))
+    lines.extend(_format_notes(stats, context, has_details=bool(details)))
     lines.append("")
     return "\n".join(lines)
 

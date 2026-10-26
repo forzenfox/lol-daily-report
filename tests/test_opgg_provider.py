@@ -39,7 +39,100 @@ def chunk_js(action_id: str = ACTION_ID, name: str = "getGames") -> str:
     )
 
 
+def participant(
+    participant_id: int,
+    team_key: str,
+    position: str,
+    champion_name: str,
+    *,
+    kills: int = 3,
+    deaths: int = 3,
+    assists: int = 5,
+    cs: int = 180,
+    neutral_cs: int = 0,
+    gold: int = 9000,
+    damage: int = 15000,
+    damage_taken: int = 12000,
+    vision: int = 20,
+    op_score: float = 5.0,
+    result: str = "WIN",
+) -> dict:
+    """构造参战者：字段形状与 OP.GG 线上响应保持一致（champion 无 key）。"""
+    return {
+        "participant_id": participant_id,
+        "team_key": team_key,
+        "position": position,
+        "champion": {"id": 1, "name": champion_name, "image_url": "https://x/a.png"},
+        "summoner": {
+            "game_name": f"Player{participant_id}",
+            "tagline": "KR1",
+            "name": f"player{participant_id}",
+        },
+        "stats": {
+            "kill": kills,
+            "death": deaths,
+            "assist": assists,
+            "minion_kill": cs,
+            "neutral_minion_kill": neutral_cs,
+            "gold_earned": gold,
+            "total_damage_dealt_to_champions": damage,
+            "total_damage_taken": damage_taken,
+            "vision_score": vision,
+            "op_score": op_score,
+            "result": result,
+        },
+    }
+
+
+def build_teams(
+    *, own_team: str = "BLUE", own_position: str = "TOP"
+) -> tuple[list[dict], list[dict]]:
+    """默认 5v5：目标玩家 pid=1，对位为对方同位置玩家 pid=6。"""
+    positions = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
+    blue: list[dict] = []
+    red: list[dict] = []
+    for index, position in enumerate(positions):
+        is_own = position == own_position
+        blue.append(
+            participant(
+                1 + index,
+                "BLUE",
+                position,
+                "Yorick" if is_own else f"Blue{index}",
+                kills=6 if is_own else 2,
+                deaths=4 if is_own else 3,
+                assists=1 if is_own else 4,
+                cs=279 if is_own else 120,
+                neutral_cs=6 if is_own else 0,
+                result="WIN",
+            )
+        )
+        red.append(
+            participant(
+                6 + index,
+                "RED",
+                position,
+                "Darius" if is_own else f"Red{index}",
+                kills=2,
+                deaths=5,
+                assists=3,
+                cs=180,
+                neutral_cs=4,
+                result="LOSE",
+            )
+        )
+    if own_team == "RED":
+        for index, item in enumerate(red):
+            item["participant_id"] = 1 + index
+            item["stats"]["result"] = "WIN"
+        for index, item in enumerate(blue):
+            item["participant_id"] = 6 + index
+            item["stats"]["result"] = "LOSE"
+    return blue, red
+
+
 def build_game(match_id: str, created_at: str, **overrides) -> dict:
+    blue, red = build_teams()
     game = {
         "id": match_id,
         "created_at": created_at,
@@ -50,10 +143,15 @@ def build_game(match_id: str, created_at: str, **overrides) -> dict:
         "champion": {"key": "yorick", "name": "Yorick"},
         "position": "TOP",
         "role": "FIGHTER",
+        "participant_id": 1,
+        "summoner_team": "BLUE",
+        "team_blue": blue,
+        "team_red": red,
         "stats": {
             "kda": {"kill": 6, "death": 4, "assist": 1, "kda": 1.75},
             "cs": {"totalCs": 279, "csPerMin": 9.9},
             "op_score": 4.8,
+            "op_score_rank": 6,
             "killParticipation": 21,
             "lane_score": 60,
         },
@@ -286,3 +384,113 @@ def test_uses_encoded_riot_id_in_page_url() -> None:
     assert fake.posts[0]["url"].endswith(
         "/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
     )
+
+
+def test_maps_op_score_rank() -> None:
+    fake = FakeHttp(batches=[[build_game("m_1", "2026-10-20T22:00:00+09:00")]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.op_score_rank == 6
+
+
+def test_op_score_rank_is_optional() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    del game["stats"]["op_score_rank"]
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.op_score_rank is None
+
+
+def test_op_score_rank_zero_is_treated_as_missing() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    game["stats"]["op_score_rank"] = 0
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.op_score_rank is None
+
+
+def test_matches_lane_opponent_by_position_on_other_team() -> None:
+    fake = FakeHttp(batches=[[build_game("m_1", "2026-10-20T22:00:00+09:00")]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+    opponent = match.lane_opponent
+
+    assert opponent is not None
+    assert opponent.position == "TOP"
+    assert opponent.team_key == "RED"
+    assert opponent.champion_name == "Darius"
+    assert opponent.champion_key == "darius"
+    assert opponent.summoner_name == "Player6#KR1"
+    assert (opponent.kills, opponent.deaths, opponent.assists) == (2, 5, 3)
+    assert opponent.cs == 184  # minion_kill + neutral_minion_kill
+    assert opponent.team_kills == 10
+    assert opponent.team_damage_to_champions == 75000
+    assert opponent.team_damage_taken == 60000
+    assert opponent.win is False
+
+
+def test_maps_own_performance_with_extended_stats() -> None:
+    fake = FakeHttp(batches=[[build_game("m_1", "2026-10-20T22:00:00+09:00")]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+    own = match.own_performance
+
+    assert own is not None
+    assert own.team_key == "BLUE"
+    assert own.cs == 285
+    assert own.gold_earned == 9000
+    assert own.damage_to_champions == 15000
+    assert own.damage_taken == 12000
+    assert own.vision_score == 20
+    assert own.team_kills == 14  # 6 + 4 名队友各 2 杀
+    assert own.team_damage_to_champions == 75000
+    assert own.team_damage_taken == 60000
+    assert own.win is True
+
+
+def test_lane_opponent_is_none_when_position_is_missing() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00", position=None)
+    for member in game["team_blue"]:
+        if member["participant_id"] == 1:
+            member["position"] = None
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.lane_opponent is None
+
+
+def test_lane_opponent_is_none_when_team_shape_is_not_5v5() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    game["team_red"] = game["team_red"][:2]
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is None
+    assert match.lane_opponent is None
+
+
+def test_own_participant_not_found_does_not_break_match() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00", participant_id=99)
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    match = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.kills == 6
+    assert match.own_performance is None
+    assert match.lane_opponent is None

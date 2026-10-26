@@ -69,6 +69,30 @@ class ResolvedAccount:
 
 
 @dataclass(frozen=True)
+class ParticipantPerformance:
+    """单局某名参战者的完整表现（用于对位对比）。"""
+
+    summoner_name: str
+    champion_key: str
+    champion_name: str
+    position: str | None
+    team_key: str
+    kills: int
+    deaths: int
+    assists: int
+    cs: int
+    gold_earned: int
+    damage_to_champions: int
+    damage_taken: int
+    vision_score: int
+    team_kills: int
+    op_score: float | None
+    win: bool
+    team_damage_to_champions: int = 0
+    team_damage_taken: int = 0
+
+
+@dataclass(frozen=True)
 class NormalizedMatch:
     match_id: str
     start_time: datetime
@@ -90,6 +114,9 @@ class NormalizedMatch:
     kill_participation: int | None
     source: str
     fetched_at: datetime
+    op_score_rank: int | None = None
+    own_performance: ParticipantPerformance | None = None
+    lane_opponent: ParticipantPerformance | None = None
 
 
 @dataclass
@@ -401,6 +428,7 @@ class OpggProvider:
         start_time = datetime.fromisoformat(game["created_at"]).astimezone(self.tz)
         champion_key = champion.get("key", "")
         champion_name = self.champion_names.get(champion_key.lower(), champion.get("name", ""))
+        own_performance, lane_opponent = self._parse_lane_data(game)
         return NormalizedMatch(
             match_id=game["id"],
             start_time=start_time,
@@ -422,4 +450,97 @@ class OpggProvider:
             kill_participation=stats.get("killParticipation"),
             source="opgg-getgames",
             fetched_at=fetched_at,
+            op_score_rank=_valid_rank(stats.get("op_score_rank")),
+            own_performance=own_performance,
+            lane_opponent=lane_opponent,
         )
+
+    def _parse_lane_data(
+        self, game: dict[str, Any]
+    ) -> tuple[ParticipantPerformance | None, ParticipantPerformance | None]:
+        """从 5v5 参战者中定位本人与同位置对位；数据不全时返回 (None, None)。"""
+        blue = game.get("team_blue") or []
+        red = game.get("team_red") or []
+        if len(blue) != 5 or len(red) != 5:
+            return None, None
+
+        team_key = str(game.get("summoner_team") or "").upper()
+        teams = {"BLUE": blue, "RED": red}
+        if team_key not in teams:
+            return None, None
+        own_team = teams[team_key]
+        other_team = red if team_key == "BLUE" else blue
+
+        participant_id = game.get("participant_id")
+        own = next(
+            (item for item in own_team if item.get("participant_id") == participant_id), None
+        )
+        if own is None:
+            return None, None
+
+        own_team_kills, own_team_damage, own_team_taken = _team_totals(own_team)
+        own_performance = _to_performance(own, own_team_kills, own_team_damage, own_team_taken)
+        position = own.get("position")
+        if not position:
+            return own_performance, None
+
+        candidates = [item for item in other_team if item.get("position") == position]
+        if len(candidates) != 1:
+            return own_performance, None
+        rival_kills, rival_damage, rival_taken = _team_totals(other_team)
+        return own_performance, _to_performance(
+            candidates[0], rival_kills, rival_damage, rival_taken
+        )
+
+
+def _team_totals(participants: list[dict[str, Any]]) -> tuple[int, int, int]:
+    """返回队伍总击杀、总对英雄伤害、总承伤，用于占比类指标。"""
+    kills = damage = damage_taken = 0
+    for item in participants:
+        stats = item.get("stats") or {}
+        kills += int(stats.get("kill") or 0)
+        damage += int(stats.get("total_damage_dealt_to_champions") or 0)
+        damage_taken += int(stats.get("total_damage_taken") or 0)
+    return kills, damage, damage_taken
+
+
+def _valid_rank(value: Any) -> int | None:
+    """竞技场等模式会返回 0，只有 1~10 才是有效的队内 OP 评分排名。"""
+    if isinstance(value, int) and 1 <= value <= 10:
+        return value
+    return None
+
+
+def _to_performance(
+    participant: dict[str, Any],
+    team_kills: int,
+    team_damage_to_champions: int,
+    team_damage_taken: int,
+) -> ParticipantPerformance:
+    stats = participant.get("stats") or {}
+    champion = participant.get("champion") or {}
+    summoner = participant.get("summoner") or {}
+    champion_name = str(champion.get("name") or "")
+    game_name = str(summoner.get("game_name") or summoner.get("name") or "")
+    tagline = str(summoner.get("tagline") or "")
+    summoner_name = f"{game_name}#{tagline}" if tagline else game_name
+    return ParticipantPerformance(
+        summoner_name=summoner_name,
+        champion_key="".join(char for char in champion_name.lower() if char.isalnum()),
+        champion_name=champion_name,
+        position=participant.get("position"),
+        team_key=str(participant.get("team_key") or ""),
+        kills=int(stats.get("kill") or 0),
+        deaths=int(stats.get("death") or 0),
+        assists=int(stats.get("assist") or 0),
+        cs=int(stats.get("minion_kill") or 0) + int(stats.get("neutral_minion_kill") or 0),
+        gold_earned=int(stats.get("gold_earned") or 0),
+        damage_to_champions=int(stats.get("total_damage_dealt_to_champions") or 0),
+        damage_taken=int(stats.get("total_damage_taken") or 0),
+        vision_score=int(stats.get("vision_score") or 0),
+        team_kills=team_kills,
+        op_score=stats.get("op_score"),
+        win=stats.get("result") == "WIN",
+        team_damage_to_champions=team_damage_to_champions,
+        team_damage_taken=team_damage_taken,
+    )
