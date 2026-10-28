@@ -16,7 +16,7 @@
     "collector": "getgames",
     "url": "https://op.gg/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
   },
-  "fetched_at": "2026-10-23T02:53:37.271927+00:00",
+  "fetched_at": "2026-10-28T04:50:04.225408+00:00",
   "stats": {
     "total_games": 7,
     "wins": 5,
@@ -107,14 +107,9 @@
   },
   "titles": [
     {
-      "key": "climbing",
-      "name": "上分密码",
-      "reason": "7 场 5 胜 2 负，胜率 71.4%"
-    },
-    {
-      "key": "rollercoaster",
-      "name": "状态过山车",
-      "reason": "7 场中出现 4 次胜负交替"
+      "key": "carry_god",
+      "name": "战神C",
+      "reason": "5 胜 2 负（71.4%），对位可比胜场 5 场，其中 4 场 KDA 高于对位（80.0%）"
     }
   ],
   "matches": [
@@ -136,9 +131,28 @@
       "kda_ratio": 1.75,
       "cs_per_min": 9.9,
       "op_score": 4.8,
+      "op_score_rank": 6,
       "kill_participation": 21,
+      "lane_opponent": {
+        "summoner_name": "PGJ#KR2",
+        "champion_key": "jayce",
+        "champion_name": "未来守护者",
+        "position": "TOP",
+        "team_key": "BLUE",
+        "kills": 1,
+        "deaths": 9,
+        "assists": 2,
+        "cs": 259,
+        "gold_earned": 11743,
+        "damage_to_champions": 11976,
+        "damage_taken": 23865,
+        "vision_score": 25,
+        "team_kills": 22,
+        "op_score": 1.891,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj_8Fkmxhg7a8qAKldY54Q2XUnPgLVtlp4E=",
@@ -158,9 +172,28 @@
       "kda_ratio": 1.8,
       "cs_per_min": 7.1,
       "op_score": 4.3,
+      "op_score_rank": 8,
       "kill_participation": 38,
+      "lane_opponent": {
+        "summoner_name": "둘리의지건#KR1",
+        "champion_key": "gragas",
+        "champion_name": "酒桶",
+        "position": "TOP",
+        "team_key": "BLUE",
+        "kills": 7,
+        "deaths": 9,
+        "assists": 16,
+        "cs": 246,
+        "gold_earned": 14817,
+        "damage_to_champions": 20637,
+        "damage_taken": 62912,
+        "vision_score": 73,
+        "team_kills": 42,
+        "op_score": 4.451,
+        "win": true
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8xVWQH8-stuMBrCBAbk7CxcthG3MiSuo4=",
@@ -180,9 +213,28 @@
       "kda_ratio": 2,
       "cs_per_min": 8.1,
       "op_score": 4.8,
+      "op_score_rank": 6,
       "kill_participation": 17,
+      "lane_opponent": {
+        "summoner_name": "헤르메스#922LV",
+        "champion_key": "yone",
+        "champion_name": "封魔剑魂",
+        "position": "TOP",
+        "team_key": "BLUE",
+        "kills": 1,
+        "deaths": 4,
+        "assists": 2,
+        "cs": 104,
+        "gold_earned": 4950,
+        "damage_to_champions": 9200,
+        "damage_taken": 13109,
+        "vision_score": 3,
+        "team_kills": 12,
+        "op_score": 3.633,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8N6pMcpAnnWrGW41Il5hKkHFAABfzEG_I=",
@@ -202,9 +254,28 @@
       "kda_ratio": 4.6,
       "cs_per_min": 6.8,
       "op_score": 7.4,
+      "op_score_rank": 3,
       "kill_participation": 55,
+      "lane_opponent": {
+        "summoner_name": "사나이#123",
+        "champion_key": "kaisa",
+        "champion_name": "虚空之女",
+        "position": "ADC",
+        "team_key": "BLUE",
+        "kills": 2,
+        "deaths": 8,
+        "assists": 5,
+        "cs": 163,
+        "gold_earned": 9081,
+        "damage_to_champions": 9608,
+        "damage_taken": 15442,
+        "vision_score": 15,
+        "team_kills": 14,
+        "op_score": 2.139,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj8Qhlb_GSN6Hw8fy6mavF2Txm5RiNmShrA=",
@@ -224,9 +295,28 @@
       "kda_ratio": 4,
       "cs_per_min": 6.6,
       "op_score": 6.5,
+      "op_score_rank": 2,
       "kill_participation": 49,
+      "lane_opponent": {
+        "summoner_name": "신민제 이리 오너라#3679",
+        "champion_key": "olaf",
+        "champion_name": "狂战士",
+        "position": "TOP",
+        "team_key": "BLUE",
+        "kills": 2,
+        "deaths": 8,
+        "assists": 10,
+        "cs": 226,
+        "gold_earned": 12689,
+        "damage_to_champions": 17916,
+        "damage_taken": 34631,
+        "vision_score": 6,
+        "team_kills": 30,
+        "op_score": 3.968,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj_u9grBe83Y3R-93o3deoXz7v2rUzsnOTs=",
@@ -246,9 +336,28 @@
       "kda_ratio": 1.29,
       "cs_per_min": 7.6,
       "op_score": 3.6,
+      "op_score_rank": 9,
       "kill_participation": 24,
+      "lane_opponent": {
+        "summoner_name": "이용진#111",
+        "champion_key": "renekton",
+        "champion_name": "荒漠屠夫",
+        "position": "TOP",
+        "team_key": "RED",
+        "kills": 2,
+        "deaths": 7,
+        "assists": 15,
+        "cs": 235,
+        "gold_earned": 13439,
+        "damage_to_champions": 19031,
+        "damage_taken": 48320,
+        "vision_score": 27,
+        "team_kills": 39,
+        "op_score": 4.419,
+        "win": true
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     },
     {
       "match_id": "m_eaDVNbCj9UQgi--cJJ8o7LfLyb7sHQJ68ODcaUNuA=",
@@ -268,9 +377,28 @@
       "kda_ratio": 1.25,
       "cs_per_min": 6.4,
       "op_score": 4.5,
+      "op_score_rank": 7,
       "kill_participation": 19,
+      "lane_opponent": {
+        "summoner_name": "종우99#치지직",
+        "champion_key": "teemo",
+        "champion_name": "迅捷斥候",
+        "position": "TOP",
+        "team_key": "BLUE",
+        "kills": 4,
+        "deaths": 3,
+        "assists": 2,
+        "cs": 118,
+        "gold_earned": 6590,
+        "damage_to_champions": 16242,
+        "damage_taken": 9614,
+        "vision_score": 16,
+        "team_kills": 10,
+        "op_score": 6.197,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:53:37.271927+00:00"
+      "fetched_at": "2026-10-28T04:50:04.225408+00:00"
     }
   ]
 }

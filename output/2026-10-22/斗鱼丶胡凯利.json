@@ -16,7 +16,7 @@
     "collector": "getgames",
     "url": "https://op.gg/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
   },
-  "fetched_at": "2026-10-23T02:23:17.542948+00:00",
+  "fetched_at": "2026-10-28T04:51:34.402938+00:00",
   "stats": {
     "total_games": 2,
     "wins": 2,
@@ -65,9 +65,28 @@
       "kda_ratio": 1.25,
       "cs_per_min": 7.3,
       "op_score": 4.3,
+      "op_score_rank": 7,
       "kill_participation": 17,
+      "lane_opponent": {
+        "summoner_name": "10번만 죽을게#KR1",
+        "champion_key": "jayce",
+        "champion_name": "未来守护者",
+        "position": "TOP",
+        "team_key": "RED",
+        "kills": 4,
+        "deaths": 4,
+        "assists": 2,
+        "cs": 182,
+        "gold_earned": 9115,
+        "damage_to_champions": 14978,
+        "damage_taken": 13494,
+        "vision_score": 18,
+        "team_kills": 13,
+        "op_score": 5.352,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:23:17.542948+00:00"
+      "fetched_at": "2026-10-28T04:51:34.402938+00:00"
     },
     {
       "match_id": "m_eaDVNbCj-7ff0JinZDRngNABmd75Jh4lPagzEht1U=",
@@ -87,9 +106,28 @@
       "kda_ratio": 1.43,
       "cs_per_min": 7.5,
       "op_score": 3.5,
+      "op_score_rank": 10,
       "kill_participation": 26,
+      "lane_opponent": {
+        "summoner_name": "퀸 탑#777",
+        "champion_key": "quinn",
+        "champion_name": "德玛西亚之翼",
+        "position": "TOP",
+        "team_key": "RED",
+        "kills": 13,
+        "deaths": 7,
+        "assists": 7,
+        "cs": 338,
+        "gold_earned": 19147,
+        "damage_to_champions": 55833,
+        "damage_taken": 40242,
+        "vision_score": 52,
+        "team_kills": 35,
+        "op_score": 6.664,
+        "win": false
+      },
       "source": "opgg-getgames",
-      "fetched_at": "2026-10-23T02:23:17.542948+00:00"
+      "fetched_at": "2026-10-28T04:51:34.402938+00:00"
     }
   ]
 }
