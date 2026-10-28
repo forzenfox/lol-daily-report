@@ -1,0 +1,37 @@
+{
+  "account": "斗鱼丶胡凯利#2862",
+  "display_name": "斗鱼丶胡凯利",
+  "region": "kr",
+  "day": "2026-10-26",
+  "window": {
+    "start": "2026-10-26T00:00:00+08:00",
+    "end": "2026-10-27T00:00:00+08:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "complete": true,
+  "pages": 1,
+  "warnings": [],
+  "source": {
+    "provider": "opgg",
+    "collector": "getgames",
+    "url": "https://op.gg/en/lol/summoners/kr/%E6%96%97%E9%B1%BC%E4%B8%B6%E8%83%A1%E5%87%AF%E5%88%A9-2862"
+  },
+  "fetched_at": null,
+  "stats": {
+    "total_games": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "kda": null,
+    "avg_kills": null,
+    "avg_deaths": null,
+    "avg_assists": null,
+    "avg_duration_seconds": 0,
+    "avg_cs": null,
+    "cs_per_min": null,
+    "sample_sufficient": false,
+    "champions": []
+  },
+  "titles": [],
+  "matches": []
+}
