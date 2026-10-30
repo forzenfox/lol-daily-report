@@ -29,6 +29,7 @@ from providers.opgg import (
     OpggProvider,
     ParticipantPerformance,
 )
+from providers.sqgg import SqggRuntime, SqggSettings, build_provider, build_runtime
 from render_image import ImageOptions, save_report_image
 from report import ReportContext, render_markdown, write_report
 from stats import DailyStats, compute_daily_stats, select_report_matches
@@ -110,6 +111,9 @@ class AccountConfig:
     display_name: str
     riot_id: str
     region: str = "kr"
+    provider: str = "opgg"
+    server: str | None = None
+    environment: str | None = None
     enabled: bool = True
 
 
@@ -122,6 +126,7 @@ class AppConfig:
     source_label: str = "OP.GG"
     render_image: bool = True
     auto_update_champions: bool = True
+    sqgg: SqggSettings = field(default_factory=SqggSettings)
 
 
 @dataclass
@@ -158,11 +163,20 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     for item in raw.get("accounts") or []:
         if not isinstance(item, dict) or not item.get("riot_id"):
             raise ValueError("每个账号都必须提供 riot_id")
+        provider = str(item.get("provider") or "opgg").lower()
+        if provider not in {"opgg", "sqgg"}:
+            raise ValueError(f"不支持的数据源: {provider}")
+        server = item.get("server")
+        if provider == "sqgg" and not server:
+            raise ValueError(f"sqgg 账号必须提供 server（大区中文名）: {item['riot_id']}")
         accounts.append(
             AccountConfig(
                 display_name=str(item.get("display_name") or item["riot_id"]),
                 riot_id=str(item["riot_id"]),
                 region=str(item.get("region") or "kr"),
+                provider=provider,
+                server=str(server) if server else None,
+                environment=str(item["environment"]) if item.get("environment") else None,
                 enabled=bool(item.get("enabled", True)),
             )
         )
@@ -176,6 +190,25 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         source_label=str(report.get("source_label") or "OP.GG"),
         render_image=bool(report.get("render_image", True)),
         auto_update_champions=bool(report.get("auto_update_champions", True)),
+        sqgg=_parse_sqgg(raw.get("sqgg")),
+    )
+
+
+def _parse_sqgg(raw: object) -> SqggSettings:
+    """解析 sqgg 配置块；缺省字段沿用默认值，凭据只存环境变量名。"""
+    data = raw if isinstance(raw, dict) else {}
+    return SqggSettings(
+        email_env=str(data.get("email_env") or "SQGG_EMAIL"),
+        password_env=str(data.get("password_env") or "SQGG_PASSWORD"),
+        token_env=str(data.get("token_env") or "SQGG_TOKEN"),
+        count_per_page=int(data.get("count_per_page", 20)),
+        max_pages=int(data.get("max_pages", 5)),
+        timeout=float(data.get("timeout", 30)),
+        retries=int(data.get("retries", 2)),
+        reserve_seconds=int(data.get("reserve_seconds", 300)),
+        token_cache=str(data.get("token_cache") or ".cache/sqgg-session.json"),
+        action_cache=str(data.get("action_cache") or ".cache/sqgg_actions.json"),
+        environment_cache=str(data.get("environment_cache") or ".cache/sqgg_environments.json"),
     )
 
 
@@ -298,8 +331,8 @@ def _build_payload(
         "pages": collection.pages,
         "warnings": list(collection.warnings),
         "source": {
-            "provider": "opgg",
-            "collector": "getgames",
+            "provider": account.provider,
+            "collector": "sgp-api" if account.provider == "sqgg" else "getgames",
             "url": collection.page_url,
         },
         "fetched_at": fetched_at,
@@ -381,9 +414,25 @@ def run(
     """逐个账号生成战报；单账号失败不影响其它账号，图片失败不阻断文案。"""
     catalog = _load_catalog_safely()
     champion_names = {entry.key: entry.name for entry in catalog} if catalog else {}
-    factory = provider_factory or (
-        lambda _account: OpggProvider(timezone=config.timezone, champion_names=champion_names)
-    )
+    sqgg_runtime: SqggRuntime | None = None
+
+    def default_factory(account: AccountConfig) -> ProviderLike:
+        nonlocal sqgg_runtime
+        if account.provider == "sqgg":
+            if account.server is None:
+                raise ValueError(f"sqgg 账号缺少 server: {account.riot_id}")
+            if sqgg_runtime is None:
+                sqgg_runtime = build_runtime(config.sqgg, config.timezone)
+            return build_provider(
+                config.sqgg,
+                account.server,
+                config.timezone,
+                account.environment,
+                runtime=sqgg_runtime,
+            )
+        return OpggProvider(timezone=config.timezone, champion_names=champion_names)
+
+    factory = provider_factory or default_factory
     active_renderer = renderer
     if active_renderer is None and config.render_image:
         active_renderer = OpggImageRenderer(catalog)
@@ -425,7 +474,7 @@ def run(
                 complete=collection.complete,
                 pages=collection.pages,
                 warnings=tuple(collection.warnings),
-                source_label=config.source_label,
+                source_label="SQGG" if account.provider == "sqgg" else config.source_label,
                 source_url=collection.page_url,
                 fetched_at=fetched_at,
                 timezone_label=config.timezone,

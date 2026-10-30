@@ -8,6 +8,23 @@ accounts:
     riot_id: "斗鱼丶胡凯利#2862"
     region: "kr"
     enabled: true
+  - display_name: "热心市民张合"
+    riot_id: "热心市民张合#65360"
+    provider: "sqgg"
+    server: "艾欧尼亚"
+    environment: "HN1"
+    enabled: true
+
+sqgg:
+  email_env: "SQGG_EMAIL"
+  password_env: "SQGG_PASSWORD"
+  token_env: "SQGG_TOKEN"
+  count_per_page: 20
+  max_pages: 5
+  timeout: 30
+  retries: 2
+  reserve_seconds: 300
+  token_cache: ".cache/sqgg-session.json"
 
 report:
   output_dir: "output"

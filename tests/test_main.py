@@ -602,6 +602,83 @@ def test_renderer_receives_match_details(tmp_path: Path) -> None:
     assert renderer.details[1].opponent is None
 
 
+def test_load_config_parses_sqgg_account(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """timezone: Asia/Shanghai
+accounts:
+  - display_name: "热心市民张合"
+    riot_id: "热心市民张合#65360"
+    provider: "sqgg"
+    server: "艾欧尼亚"
+    environment: "HN1"
+sqgg:
+  max_pages: 10
+  reserve_seconds: 120
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    account = config.accounts[0]
+    assert account.provider == "sqgg"
+    assert account.server == "艾欧尼亚"
+    assert account.environment == "HN1"
+    assert config.sqgg.max_pages == 10
+    assert config.sqgg.reserve_seconds == 120
+
+
+def test_load_config_rejects_sqgg_account_without_server(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """timezone: Asia/Shanghai
+accounts:
+  - riot_id: "热心市民张合#65360"
+    provider: "sqgg"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="server"):
+        load_config(path)
+
+
+def test_run_dispatches_sqgg_account(tmp_path: Path, monkeypatch) -> None:
+    import main as main_module
+
+    captured: dict[str, str | None] = {}
+
+    monkeypatch.setattr(main_module, "build_runtime", lambda _settings, _tz: object())
+
+    def fake_build(settings, server, timezone, environment=None, runtime=None):
+        captured["server"] = server
+        captured["environment"] = environment
+        return FakeProvider(make_collection("热心市民张合#65360"))
+
+    monkeypatch.setattr(main_module, "build_provider", fake_build)
+    config = AppConfig(
+        accounts=(
+            AccountConfig(
+                display_name="热心市民张合",
+                riot_id="热心市民张合#65360",
+                provider="sqgg",
+                server="艾欧尼亚",
+                environment="HN1",
+            ),
+        ),
+        render_image=False,
+    )
+
+    result = run(config, date(2026, 10, 20), output_dir=tmp_path)
+
+    assert result.accounts[0].ok is True
+    assert captured == {"server": "艾欧尼亚", "environment": "HN1"}
+    payload = json.loads(Path(result.accounts[0].json_path or "").read_text(encoding="utf-8"))
+    assert payload["source"]["provider"] == "sqgg"
+    assert payload["source"]["collector"] == "sgp-api"
+
+
 def test_ensure_catalog_localizes_lane_opponent_name(tmp_path: Path, monkeypatch) -> None:
     import main as main_module
 

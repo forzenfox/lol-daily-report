@@ -22,7 +22,7 @@ concurrency:
 jobs:
   daily-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: 检出代码
@@ -64,6 +64,8 @@ jobs:
       - name: 生成战报
         env:
           TZ: Asia/Shanghai
+          SQGG_EMAIL: ${{ secrets.SQGG_EMAIL }}
+          SQGG_PASSWORD: ${{ secrets.SQGG_PASSWORD }}
         run: |
           python src/main.py --date "${TARGET_DATE}"
 
