@@ -93,7 +93,7 @@ class ImageOptions:
     background: str = COLOR_BACKGROUND
     accent: str = COLOR_ACCENT
     font_paths: tuple[str, ...] = DEFAULT_FONT_CANDIDATES
-    title: str = "鱼人韩服单排日报"
+    title: str = "鱼人韩服单双排日报"
 
 
 def find_font(size: int, paths: Sequence[str] | None = None) -> ImageFont.FreeTypeFont:
@@ -200,6 +200,15 @@ def format_champion_kda(kda: float) -> str:
 
 def format_report_title(title: str, day: date) -> str:
     return f"{title} · {day.isoformat()}"
+
+
+def format_report_subtitle(context: ReportContext) -> str:
+    """副标题：账号 · 当前段位（可选） · 时区。"""
+    parts = [context.account]
+    if context.rank is not None:
+        parts.append(context.rank.display())
+    parts.append(context.timezone_label)
+    return " · ".join(parts)
 
 
 def _draw_radar(
@@ -681,10 +690,11 @@ def render_report_image(
     header = format_report_title(active.title, context.day)
     title_font = _fit_font(header, inner_width - 40 * scale, int(52 * scale), active, draw)
     draw.text((margin, 64 * scale), header, font=title_font, fill=COLOR_TEXT)
-    sub_font = find_font(int(26 * scale), active.font_paths)
+    subtitle = format_report_subtitle(context)
+    sub_font = _fit_font(subtitle, inner_width, int(26 * scale), active, draw)
     draw.text(
         (margin, 132 * scale),
-        f"{context.account} · {context.timezone_label}",
+        subtitle,
         font=sub_font,
         fill=COLOR_MUTED,
     )

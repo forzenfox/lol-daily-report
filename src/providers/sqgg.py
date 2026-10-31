@@ -25,6 +25,7 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from providers.opgg import DayCollection, NormalizedMatch, ParticipantPerformance
+from rank import parse_sqgg_rank
 
 BASE_URL = "https://sqgg.cc"
 PAGE_SIZE = 20
@@ -40,6 +41,7 @@ USER_AGENT = (
 
 SUMMONER_BY_NAME_PATH = "/sqgg-api/sgp-service/summoner-by-name"
 LOL_MATCH_PATH = "/sqgg-api/sgp-service/lol-match"
+RANK_PATH = "/sqgg-api/sgp-service/rank"
 
 REQUIRED_JSON_KEYS = (
     "gameId",
@@ -661,6 +663,19 @@ class SqggProvider:
             f"&tagLine={urllib.parse.quote(tag_line)}&puuid={puuid}"
         )
 
+        rank = None
+        rank_failed = False
+        try:
+            rank_payload = self.http.get_json(
+                RANK_PATH,
+                params={"environment": environment, "puuid": puuid},
+                token=access.token,
+            )
+            _ensure_success(rank_payload)
+            rank = parse_sqgg_rank(rank_payload)
+        except SqggError:
+            rank_failed = True
+
         matches: list[NormalizedMatch] = []
         warnings: list[str] = []
         pages = 0
@@ -723,6 +738,8 @@ class SqggProvider:
 
         if hit_page_cap:
             warnings.append("coverage_may_be_truncated")
+        if rank_failed:
+            warnings.append("rank_unavailable")
         reached_end = exhausted or (oldest_seen is not None and oldest_seen < window_start)
         matches.sort(key=lambda item: item.start_time, reverse=True)
         return DayCollection(
@@ -735,6 +752,7 @@ class SqggProvider:
             oldest_seen=oldest_seen,
             warnings=warnings,
             page_url=self.page_url,
+            rank=rank,
         )
 
     def _resolve_account(self, environment: str, game_name: str, tag_line: str) -> str:

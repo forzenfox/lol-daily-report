@@ -24,6 +24,8 @@ from datetime import time as dt_time
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from rank import RankInfo, parse_opgg_rank
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
@@ -130,6 +132,7 @@ class DayCollection:
     oldest_seen: datetime | None
     warnings: list[str] = field(default_factory=list)
     page_url: str = ""
+    rank: RankInfo | None = None
 
 
 def _nested(data: dict[str, Any], path: tuple[str, ...]) -> Any:
@@ -346,6 +349,7 @@ class OpggProvider:
         window_end = window_start + timedelta(days=1)
 
         account, html = self._resolve(riot_id, region)
+        rank = parse_opgg_rank(html)
         action_id = self._discover_action_id(html)
 
         matches: list[NormalizedMatch] = []
@@ -410,6 +414,7 @@ class OpggProvider:
             oldest_seen=oldest_seen,
             warnings=warnings,
             page_url=account.page_url,
+            rank=rank,
         )
 
     def _to_match(self, game: dict[str, Any], fetched_at: datetime) -> NormalizedMatch:

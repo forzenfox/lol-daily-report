@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from match_details import MatchDetail, position_label
+from rank import RankInfo
 from stats import DailyStats
 from titles import Title
 
@@ -32,6 +33,7 @@ class ReportContext:
     source_url: str = ""
     fetched_at: datetime | None = None
     timezone_label: str = "Asia/Shanghai"
+    rank: RankInfo | None = None
 
 
 def _fmt_duration(seconds: int) -> str:
@@ -114,6 +116,7 @@ def render_markdown(
         f"# {context.account} 战报 · {context.day.isoformat()}",
         "",
         f"- 账号：{context.account}",
+        *([f"- 当前段位：{context.rank.display()}"] if context.rank is not None else []),
         f"- 统计窗口：{window_label}",
         f"- 数据来源：{context.source_label}",
     ]

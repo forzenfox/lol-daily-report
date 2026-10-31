@@ -16,8 +16,10 @@ from main import (
     AppConfig,
     RunResult,
     _ensure_catalog,
+    build_report_title,
     load_config,
     main,
+    render_from_json,
     run,
 )
 from providers.opgg import (
@@ -26,6 +28,7 @@ from providers.opgg import (
     ParticipantPerformance,
     ProviderError,
 )
+from rank import RankInfo
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -143,6 +146,7 @@ def make_collection(account: str = "斗鱼丶胡凯利#2862") -> DayCollection:
         pages=1,
         oldest_seen=datetime(2026, 10, 20, 19, 0, tzinfo=SHANGHAI),
         page_url="https://op.gg/en/lol/summoners/kr/example-2862",
+        rank=RankInfo(tier="MASTER", league_points=277, wins=218, losses=206),
     )
 
 
@@ -272,9 +276,13 @@ def test_run_generates_markdown_and_json(tmp_path: Path) -> None:
     assert Path(account_result.image_path).name == "斗鱼丶胡凯利.png"
     markdown = Path(account_result.report_path or "").read_text(encoding="utf-8")
     assert "总场次：3" in markdown
-    assert "战神C" in markdown
+    assert "战神" in markdown
+    assert "当前段位：大师 277 胜点" in markdown
 
     payload = json.loads(Path(account_result.json_path or "").read_text(encoding="utf-8"))
+    assert payload["rank"]["tier"] == "MASTER"
+    assert payload["rank"]["league_points"] == 277
+    assert payload["rank"]["display"] == "大师 277 胜点"
     assert payload["account"] == "斗鱼丶胡凯利#2862"
     assert payload["day"] == "2026-10-20"
     assert payload["stats"]["total_games"] == 3
@@ -284,6 +292,137 @@ def test_run_generates_markdown_and_json(tmp_path: Path) -> None:
     assert payload["matches"][0]["start_time"] == "2026-10-20T20:00:00+08:00"
     assert payload["source"]["url"] == "https://op.gg/en/lol/summoners/kr/example-2862"
     assert payload["complete"] is True
+
+
+def test_json_payload_includes_own_performance(tmp_path: Path) -> None:
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="斗鱼丶胡凯利", riot_id="斗鱼丶胡凯利#2862"),)
+    )
+
+    result = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(make_collection()),
+        output_dir=tmp_path,
+        renderer=FakeRenderer(),
+    )
+
+    payload = json.loads(Path(result.accounts[0].json_path or "").read_text(encoding="utf-8"))
+    first, second = payload["matches"][0], payload["matches"][1]
+    assert first["own_performance"]["champion_name"] == "牧魂人"
+    assert first["own_performance"]["team_key"] == "BLUE"
+    assert first["own_performance"]["damage_to_champions"] == 12000
+    assert second["own_performance"] is None
+
+
+def test_build_report_title_combines_streamer_and_server() -> None:
+    assert build_report_title("余小C", "opgg") == "余小C韩服单双排日报"
+    assert build_report_title("洞主", "sqgg") == "洞主国服单双排日报"
+    assert build_report_title("凯哥", "sqgg") == "凯哥国服单双排日报"
+
+
+def test_run_uses_streamer_and_server_specific_image_title(tmp_path: Path, monkeypatch) -> None:
+    import main as main_module
+
+    captured: list[str | None] = []
+
+    def fake_renderer(catalog=None, **kwargs):
+        options = kwargs.get("options")
+        captured.append(options.title if options is not None else None)
+        return FakeRenderer()
+
+    monkeypatch.setattr(main_module, "OpggImageRenderer", fake_renderer)
+    config = AppConfig(
+        accounts=(
+            AccountConfig(
+                display_name="洞主",
+                riot_id="热心市民张合#65360",
+                provider="sqgg",
+                server="艾欧尼亚",
+                environment="HN1",
+            ),
+        ),
+        auto_update_champions=False,
+    )
+
+    run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(make_collection()),
+        output_dir=tmp_path,
+    )
+
+    assert captured == ["洞主国服单双排日报"]
+
+
+def test_render_from_json_regenerates_reports(tmp_path: Path) -> None:
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="斗鱼丶胡凯利", riot_id="斗鱼丶胡凯利#2862"),),
+        auto_update_champions=False,
+    )
+
+    first = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(make_collection()),
+        output_dir=tmp_path / "source",
+        renderer=FakeRenderer(),
+    )
+    renderer = FakeRenderer()
+
+    result = render_from_json(
+        first.accounts[0].json_path or "",
+        config=config,
+        output_dir=tmp_path / "offline",
+        renderer=renderer,
+    )
+
+    target_dir = tmp_path / "offline" / "2026-10-20"
+    assert result.ok is True
+    assert result.matches == 3
+    assert Path(result.report_path or "").name == "斗鱼丶胡凯利.md"
+    assert Path(result.json_path or "").name == "斗鱼丶胡凯利.json"
+    assert Path(result.image_path or "").name == "斗鱼丶胡凯利.png"
+    assert (target_dir / "斗鱼丶胡凯利.json").exists()
+    assert "当前段位：大师 277 胜点" in Path(result.report_path or "").read_text(encoding="utf-8")
+    assert len(renderer.details) == 3
+    assert renderer.details[0].player_radar
+
+
+def test_main_render_json_cli(tmp_path: Path, capsys) -> None:
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="斗鱼丶胡凯利", riot_id="斗鱼丶胡凯利#2862"),),
+        auto_update_champions=False,
+    )
+    first = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(make_collection()),
+        output_dir=tmp_path / "source",
+        renderer=FakeRenderer(),
+    )
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "accounts:\n  - display_name: 斗鱼丶胡凯利\n    riot_id: 斗鱼丶胡凯利#2862\n",
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "--config",
+            str(config_path),
+            "--render-json",
+            str(first.accounts[0].json_path),
+            "--no-image",
+            "--output-dir",
+            str(tmp_path / "cli"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "[OK]" in captured.out
+    assert (tmp_path / "cli" / "2026-10-20" / "斗鱼丶胡凯利.md").exists()
 
 
 def test_non_ranked_matches_are_excluded_from_report(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -30,6 +30,7 @@ from providers.opgg import (
     ParticipantPerformance,
 )
 from providers.sqgg import SqggRuntime, SqggSettings, build_provider, build_runtime
+from rank import RankInfo
 from render_image import ImageOptions, save_report_image
 from report import ReportContext, render_markdown, write_report
 from stats import DailyStats, compute_daily_stats, select_report_matches
@@ -217,6 +218,12 @@ def _safe_filename(text: str) -> str:
     return cleaned or "account"
 
 
+def build_report_title(display_name: str, provider: str) -> str:
+    """图片大标题：{主播名}{服务器}单双排日报。"""
+    server = "国服" if provider == "sqgg" else "韩服"
+    return f"{display_name}{server}单双排日报"
+
+
 def _performance_payload(performance: ParticipantPerformance | None) -> dict[str, Any] | None:
     if performance is None:
         return None
@@ -237,6 +244,21 @@ def _performance_payload(performance: ParticipantPerformance | None) -> dict[str
         "team_kills": performance.team_kills,
         "op_score": performance.op_score,
         "win": performance.win,
+        "team_damage_to_champions": performance.team_damage_to_champions,
+        "team_damage_taken": performance.team_damage_taken,
+    }
+
+
+def _rank_payload(rank: RankInfo | None) -> dict[str, Any] | None:
+    if rank is None:
+        return None
+    return {
+        "tier": rank.tier,
+        "division": rank.division,
+        "league_points": rank.league_points,
+        "wins": rank.wins,
+        "losses": rank.losses,
+        "display": rank.display(),
     }
 
 
@@ -261,6 +283,7 @@ def _match_payload(match: NormalizedMatch) -> dict[str, Any]:
         "op_score": match.op_score,
         "op_score_rank": match.op_score_rank,
         "kill_participation": match.kill_participation,
+        "own_performance": _performance_payload(match.own_performance),
         "lane_opponent": _performance_payload(match.lane_opponent),
         "source": match.source,
         "fetched_at": match.fetched_at.isoformat(),
@@ -336,12 +359,205 @@ def _build_payload(
             "url": collection.page_url,
         },
         "fetched_at": fetched_at,
+        "rank": _rank_payload(collection.rank),
         "stats": _stats_payload(stats),
         "titles": [
             {"key": title.key, "name": title.name, "reason": title.reason} for title in titles
         ],
         "matches": [_match_payload(match) for match in collection.matches],
     }
+
+
+def _performance_from_payload(payload: Any) -> ParticipantPerformance | None:
+    if not isinstance(payload, dict):
+        return None
+    op_score = payload.get("op_score")
+    return ParticipantPerformance(
+        summoner_name=str(payload.get("summoner_name") or ""),
+        champion_key=str(payload.get("champion_key") or ""),
+        champion_name=str(payload.get("champion_name") or ""),
+        position=payload.get("position") if isinstance(payload.get("position"), str) else None,
+        team_key=str(payload.get("team_key") or ""),
+        kills=int(payload.get("kills") or 0),
+        deaths=int(payload.get("deaths") or 0),
+        assists=int(payload.get("assists") or 0),
+        cs=int(payload.get("cs") or 0),
+        gold_earned=int(payload.get("gold_earned") or 0),
+        damage_to_champions=int(payload.get("damage_to_champions") or 0),
+        damage_taken=int(payload.get("damage_taken") or 0),
+        vision_score=int(payload.get("vision_score") or 0),
+        team_kills=int(payload.get("team_kills") or 0),
+        op_score=float(op_score) if isinstance(op_score, int | float) else None,
+        win=bool(payload.get("win")),
+        team_damage_to_champions=int(payload.get("team_damage_to_champions") or 0),
+        team_damage_taken=int(payload.get("team_damage_taken") or 0),
+    )
+
+
+def _match_from_payload(payload: Mapping[str, Any]) -> NormalizedMatch:
+    return NormalizedMatch(
+        match_id=str(payload["match_id"]),
+        start_time=datetime.fromisoformat(str(payload["start_time"])),
+        duration_seconds=int(payload.get("duration_seconds") or 0),
+        win=bool(payload.get("win")),
+        champion_key=str(payload.get("champion_key") or ""),
+        champion_name=str(payload.get("champion_name") or ""),
+        kills=int(payload.get("kills") or 0),
+        deaths=int(payload.get("deaths") or 0),
+        assists=int(payload.get("assists") or 0),
+        cs=int(payload.get("cs") or 0),
+        position=payload.get("position") if isinstance(payload.get("position"), str) else None,
+        queue_type=str(payload.get("queue_type") or ""),
+        queue_label=str(payload.get("queue_label") or ""),
+        game_map=payload.get("game_map") if isinstance(payload.get("game_map"), str) else None,
+        kda_ratio=payload.get("kda_ratio")
+        if isinstance(payload.get("kda_ratio"), int | float)
+        else None,
+        cs_per_min=payload.get("cs_per_min")
+        if isinstance(payload.get("cs_per_min"), int | float)
+        else None,
+        op_score=float(payload["op_score"])
+        if isinstance(payload.get("op_score"), int | float)
+        else None,
+        kill_participation=int(payload["kill_participation"])
+        if isinstance(payload.get("kill_participation"), int | float)
+        else None,
+        source=str(payload.get("source") or ""),
+        fetched_at=datetime.fromisoformat(str(payload["fetched_at"])),
+        op_score_rank=int(payload["op_score_rank"])
+        if isinstance(payload.get("op_score_rank"), int | float)
+        else None,
+        own_performance=_performance_from_payload(payload.get("own_performance")),
+        lane_opponent=_performance_from_payload(payload.get("lane_opponent")),
+    )
+
+
+def _rank_from_payload(payload: Any) -> RankInfo | None:
+    if not isinstance(payload, dict):
+        return None
+    tier = str(payload.get("tier") or "").upper()
+    if not tier:
+        return None
+    league_points = payload.get("league_points")
+    return RankInfo(
+        tier=tier,
+        division=payload.get("division") if isinstance(payload.get("division"), str) else None,
+        league_points=int(league_points) if isinstance(league_points, int | float) else None,
+        wins=int(payload["wins"]) if isinstance(payload.get("wins"), int | float) else None,
+        losses=int(payload["losses"]) if isinstance(payload.get("losses"), int | float) else None,
+    )
+
+
+def _account_from_payload(payload: Mapping[str, Any], config: AppConfig) -> AccountConfig:
+    riot_id = str(payload.get("account") or "")
+    for account in config.accounts:
+        if account.riot_id == riot_id:
+            return account
+    provider = str((payload.get("source") or {}).get("provider") or "opgg").lower()
+    return AccountConfig(
+        display_name=str(payload.get("display_name") or riot_id or "account"),
+        riot_id=riot_id or "account",
+        region=str(payload.get("region") or "kr"),
+        provider=provider,
+    )
+
+
+def _maybe_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def render_from_json(
+    json_path: str | Path,
+    *,
+    config: AppConfig | None = None,
+    output_dir: str | Path | None = None,
+    renderer: RendererLike | None = None,
+) -> AccountResult:
+    """从已落盘的 JSON 重新生成 Markdown/JSON/PNG（不访问数据源）。"""
+    active = config or AppConfig()
+    payload = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError("战报 JSON 根节点必须是对象")
+    account = _account_from_payload(payload, active)
+    matches = [
+        _match_from_payload(item) for item in payload.get("matches") or [] if isinstance(item, dict)
+    ]
+    if not matches:
+        return AccountResult(account=account.riot_id, ok=True, skipped=True)
+
+    window = payload.get("window") or {}
+    source = payload.get("source") or {}
+    rank = _rank_from_payload(payload.get("rank"))
+    stats = compute_daily_stats(matches, minimum_games=active.minimum_games_for_judgement)
+    titles = evaluate_titles(stats, matches)
+    details = compute_match_details(matches)
+    context = ReportContext(
+        account=account.riot_id,
+        day=date.fromisoformat(str(payload["day"])),
+        window_start=datetime.fromisoformat(str(window["start"])),
+        window_end=datetime.fromisoformat(str(window["end"])),
+        complete=bool(payload.get("complete", False)),
+        pages=int(payload.get("pages") or 0),
+        warnings=tuple(str(item) for item in payload.get("warnings") or ()),
+        source_label="SQGG" if account.provider == "sqgg" else active.source_label,
+        source_url=str(source.get("url") or ""),
+        fetched_at=_maybe_datetime(payload.get("fetched_at")),
+        timezone_label=str(window.get("timezone") or active.timezone),
+        rank=rank,
+    )
+    collection = DayCollection(
+        account=account.riot_id,
+        window_start=context.window_start,
+        window_end=context.window_end,
+        matches=matches,
+        complete=context.complete,
+        pages=context.pages,
+        oldest_seen=None,
+        warnings=list(context.warnings),
+        page_url=context.source_url,
+        rank=rank,
+    )
+
+    target_dir = Path(output_dir or active.output_dir) / context.day.isoformat()
+    safe_name = _safe_filename(account.display_name)
+    report_path = write_report(
+        target_dir / f"{safe_name}.md",
+        render_markdown(stats, context, titles, details=details),
+    )
+    json_out = _write_json(
+        target_dir / f"{safe_name}.json",
+        _build_payload(account, collection, stats, titles, active),
+    )
+
+    image_path: str | None = None
+    image_error: str | None = None
+    active_renderer = renderer
+    if active_renderer is None and active.render_image:
+        active_renderer = OpggImageRenderer(
+            _load_catalog_safely(),
+            options=ImageOptions(title=build_report_title(account.display_name, account.provider)),
+        )
+    if active_renderer is not None:
+        try:
+            image_path = str(
+                active_renderer.render(
+                    target_dir / f"{safe_name}.png", stats, context, titles, details=details
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - 图片失败不阻断文案产物
+            image_error = f"{type(exc).__name__}: {exc}"
+
+    return AccountResult(
+        account=account.riot_id,
+        ok=True,
+        matches=len(matches),
+        report_path=str(report_path),
+        json_path=str(json_out),
+        image_path=image_path,
+        image_error=image_error,
+    )
 
 
 def _load_catalog_safely(path: Path = DEFAULT_CHAMPION_CATALOG) -> ChampionCatalog | None:
@@ -433,9 +649,6 @@ def run(
         return OpggProvider(timezone=config.timezone, champion_names=champion_names)
 
     factory = provider_factory or default_factory
-    active_renderer = renderer
-    if active_renderer is None and config.render_image:
-        active_renderer = OpggImageRenderer(catalog)
 
     target_dir = Path(output_dir or config.output_dir) / day.isoformat()
     result = RunResult(day=day)
@@ -454,7 +667,15 @@ def run(
                 )
                 continue
             collection = replace(collection, matches=report_matches)
-            catalog = _ensure_catalog(config, catalog, collection, active_renderer, champion_names)
+            catalog = _ensure_catalog(config, catalog, collection, renderer, champion_names)
+            active_renderer = renderer
+            if active_renderer is None and config.render_image:
+                active_renderer = OpggImageRenderer(
+                    catalog,
+                    options=ImageOptions(
+                        title=build_report_title(account.display_name, account.provider)
+                    ),
+                )
             stats = compute_daily_stats(
                 collection.matches, minimum_games=config.minimum_games_for_judgement
             )
@@ -478,6 +699,7 @@ def run(
                 source_url=collection.page_url,
                 fetched_at=fetched_at,
                 timezone_label=config.timezone,
+                rank=collection.rank,
             )
             content = render_markdown(stats, context, titles, details=details)
             safe_name = _safe_filename(account.display_name)
@@ -526,12 +748,31 @@ def run(
     return result
 
 
+def _print_account_result(item: AccountResult) -> None:
+    if item.skipped:
+        print(f"[SKIP] {item.account}: 当日无 5v5 排位对局，跳过产物生成")
+    elif item.ok:
+        suffix = ""
+        if item.image_path:
+            suffix = f" | 图片 {item.image_path}"
+        elif item.image_error:
+            suffix = f" | 图片失败: {item.image_error}"
+        print(f"[OK] {item.account}: {item.matches} 场 -> {item.report_path}{suffix}")
+    else:
+        print(f"[FAIL] {item.account}: {item.error}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="生成 LOL 韩服主播每日战报")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="配置文件路径")
     parser.add_argument("--date", default=None, help="统计日期（Asia/Shanghai），YYYY-MM-DD")
     parser.add_argument("--output-dir", default=None, help="覆盖配置中的输出目录")
     parser.add_argument("--no-image", action="store_true", help="跳过 PNG 生成")
+    parser.add_argument(
+        "--render-json",
+        default=None,
+        help="从已有战报 JSON 重新生成产物（离线，不访问数据源）",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -542,24 +783,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_image:
         config = replace(config, render_image=False)
 
+    if args.render_json:
+        try:
+            item = render_from_json(args.render_json, config=config, output_dir=args.output_dir)
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            print(f"[ERROR] 离线渲染失败: {exc}", file=sys.stderr)
+            return 2
+        _print_account_result(item)
+        return 0 if item.ok else 1
+
     timezone = ZoneInfo(config.timezone)
     day = date.fromisoformat(args.date) if args.date else datetime.now(timezone).date()
     result = run(config, day, output_dir=args.output_dir)
 
     for account in result.accounts:
-        if account.skipped:
-            print(f"[SKIP] {account.account}: 当日无 5v5 排位对局，跳过产物生成")
-        elif account.ok:
-            suffix = ""
-            if account.image_path:
-                suffix = f" | 图片 {account.image_path}"
-            elif account.image_error:
-                suffix = f" | 图片失败: {account.image_error}"
-            print(
-                f"[OK] {account.account}: {account.matches} 场 -> {account.report_path}{suffix}",
-            )
-        else:
-            print(f"[FAIL] {account.account}: {account.error}", file=sys.stderr)
+        _print_account_result(account)
 
     return 1 if result.failed else 0
 

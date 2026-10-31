@@ -20,15 +20,26 @@ CHUNK_URL = "https://c-lol-web.op.gg/app-router/releases/production-422-1-abc/_n
 PAGE_URL_CHUNK = CHUNK_URL
 
 
-def page_html(puuid: str = PUUID) -> str:
-    """模拟服务端 HTML：包含 chunk 引用与转义后的 puuid。"""
+def page_html(puuid: str = PUUID, *, rank_description: str | None = None) -> str:
+    """模拟服务端 HTML：包含 chunk 引用、转义后的 puuid，可选段位描述。"""
+    meta = (
+        f'<meta name="description" content="{rank_description}"/>'
+        if rank_description is not None
+        else ""
+    )
     return (
         "<html><head>"
-        f'<script src="{CHUNK_URL}"></script>'
+        f'<script src="{CHUNK_URL}"></script>{meta}'
         "</head><body><script>self.__next_f.push([1,"
         f'\\"puuid\\":\\"{puuid}\\"'
         "])</script></body></html>"
     )
+
+
+RANK_DESCRIPTION = (
+    "current SOLORANKED rank is master Division 1 466 LP with 587 wins, 571 losses, "
+    "and a 51% win rate."
+)
 
 
 def chunk_js(action_id: str = ACTION_ID, name: str = "getGames") -> str:
@@ -311,6 +322,21 @@ def test_maps_normalized_fields() -> None:
     assert match.queue_type == "SOLORANKED"
     assert match.source == "opgg-getgames"
     assert match.fetched_at is not None
+
+
+def test_collect_day_includes_current_rank_from_page() -> None:
+    fake = FakeHttp(
+        html=page_html(rank_description=RANK_DESCRIPTION),
+        batches=[[build_game("m_1", "2026-10-20T22:00:00+09:00")]],
+    )
+    provider = make_provider(fake)
+
+    collection = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20))
+
+    assert collection.rank is not None
+    assert collection.rank.tier == "MASTER"
+    assert collection.rank.league_points == 466
+    assert collection.rank.display() == "大师 466 胜点"
 
 
 def test_raises_schema_error_when_required_field_missing() -> None:

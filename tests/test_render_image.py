@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 
 from match_details import compute_match_details
 from providers.opgg import NormalizedMatch, ParticipantPerformance
+from rank import RankInfo
 from render_image import (
     DEFAULT_FONT_CANDIDATES,
     ImageOptions,
@@ -18,6 +19,7 @@ from render_image import (
     _format_radar_value,
     find_font,
     format_champion_kda,
+    format_report_subtitle,
     format_report_title,
     render_report_image,
     save_report_image,
@@ -240,7 +242,7 @@ def test_render_with_titles_does_not_crash() -> None:
     titles = [
         Title(
             key="carry_god",
-            name="战神C",
+            name="战神",
             reason="5 胜 2 负（71.4%），对位可比胜场 4 场，其中 3 场 KDA 高于对位（75.0%）",
         )
     ]
@@ -297,10 +299,20 @@ def test_format_champion_kda_uses_two_decimals() -> None:
     assert format_champion_kda(0.4) == "KDA 0.40"
 
 
+def test_format_report_subtitle_includes_rank() -> None:
+    context = make_context(rank=RankInfo(tier="MASTER", league_points=277))
+
+    assert format_report_subtitle(context) == "斗鱼丶胡凯利#2862 · 大师 277 胜点 · Asia/Shanghai"
+
+
+def test_format_report_subtitle_without_rank() -> None:
+    assert format_report_subtitle(make_context()) == "斗鱼丶胡凯利#2862 · Asia/Shanghai"
+
+
 def test_format_report_title_appends_day() -> None:
     assert (
-        format_report_title("鱼人韩服单排日报", date(2026, 10, 20))
-        == "鱼人韩服单排日报 · 2026-10-20"
+        format_report_title("鱼人韩服单双排日报", date(2026, 10, 20))
+        == "鱼人韩服单双排日报 · 2026-10-20"
     )
 
 
@@ -311,7 +323,7 @@ def test_wrap_text_keeps_percentage_token_intact() -> None:
     font = find_font(24, [font_path])
     canvas = Image.new("RGB", (10, 10))
     draw = ImageDraw.Draw(canvas)
-    text = "战神C：7 场 5 胜 2 负，胜率 71.4%"
+    text = "战神：7 场 5 胜 2 负，胜率 71.4%"
 
     lines = wrap_text(text, font, 200, draw)
 

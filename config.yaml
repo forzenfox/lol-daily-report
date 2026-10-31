@@ -4,12 +4,18 @@ schedule:
   description: "每天 05:00（Asia/Shanghai）运行"
 
 accounts:
-  - display_name: "斗鱼丶胡凯利"
+  - display_name: "余小C"
     riot_id: "斗鱼丶胡凯利#2862"
     region: "kr"
     enabled: true
-  - display_name: "热心市民张合"
+  - display_name: "洞主"
     riot_id: "热心市民张合#65360"
+    provider: "sqgg"
+    server: "艾欧尼亚"
+    environment: "HN1"
+    enabled: true
+  - display_name: "凯哥"
+    riot_id: "我心如铁石#43240"
     provider: "sqgg"
     server: "艾欧尼亚"
     environment: "HN1"

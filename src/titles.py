@@ -97,7 +97,7 @@ def evaluate_titles(
         return [
             Title(
                 key="carry_god",
-                name="战神C",
+                name="战神",
                 reason=f"{record}，对位可比胜场 {comparable} 场，"
                 f"其中 {higher} 场 KDA 高于对位（{higher / comparable * 100:.1f}%）",
             )

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from match_details import compute_match_details
 from providers.opgg import NormalizedMatch, ParticipantPerformance
+from rank import RankInfo
 from report import ReportContext, render_markdown, write_report
 from stats import compute_daily_stats
 from titles import Title
@@ -104,6 +105,17 @@ def make_context(**overrides) -> ReportContext:
     return ReportContext(**params)
 
 
+def test_includes_current_rank_when_provided() -> None:
+    stats = compute_daily_stats([make_match("m1")], minimum_games=1)
+
+    text = render_markdown(
+        stats,
+        make_context(rank=RankInfo(tier="MASTER", league_points=277)),
+    )
+
+    assert "当前段位：大师 277 胜点" in text
+
+
 def test_includes_header_window_and_source() -> None:
     stats = compute_daily_stats([make_match("m1")], minimum_games=1)
 
@@ -183,7 +195,7 @@ def test_renders_titles_with_reasons() -> None:
     titles = [
         Title(
             key="carry_god",
-            name="战神C",
+            name="战神",
             reason="5 胜 2 负（71.4%），对位可比胜场 4 场，其中 3 场 KDA 高于对位（75.0%）",
         )
     ]
@@ -191,7 +203,7 @@ def test_renders_titles_with_reasons() -> None:
     text = render_markdown(stats, make_context(), titles=titles)
 
     assert "## 趣味称号" in text
-    assert "战神C" in text
+    assert "战神" in text
     assert "75.0%" in text
 
 

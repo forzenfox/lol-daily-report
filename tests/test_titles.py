@@ -172,7 +172,7 @@ def test_carry_god_triggers_when_most_wins_win_lane_kda() -> None:
 
     assert keys(titles) == ["carry_god"]
     title = titles[0]
-    assert title.name == "战神C"
+    assert title.name == "战神"
     assert "3 场 KDA 高于对位" in title.reason
     assert "75.0%" in title.reason
 

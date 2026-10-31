@@ -489,11 +489,37 @@ def make_provider(http: FakeHttp, session: FakeSession, **kwargs) -> SqggProvide
     )
 
 
-def queue_account(http: FakeHttp, puuid: str = PUUID) -> None:
+RANK_PATH = "/sqgg-api/sgp-service/rank"
+
+
+def queue_rank(http: FakeHttp, tier: str = "MASTER", division: str = "I", lp: int = 277) -> None:
+    http.queue_json(
+        RANK_PATH,
+        {
+            "status": "Success",
+            "data": {
+                "queues": [
+                    {
+                        "queueType": "RANKED_SOLO_5x5",
+                        "tier": tier,
+                        "rank": division,
+                        "leaguePoints": lp,
+                        "wins": 218,
+                        "losses": 206,
+                    }
+                ]
+            },
+        },
+    )
+
+
+def queue_account(http: FakeHttp, puuid: str = PUUID, *, with_rank: bool = True) -> None:
     http.queue_json(
         "/sqgg-api/sgp-service/summoner-by-name",
         {"status": "Success", "message": None, "data": {"puuid": puuid}},
     )
+    if with_rank:
+        queue_rank(http)
 
 
 def queue_games(http: FakeHttp, *pages: list[dict]) -> None:
@@ -608,6 +634,33 @@ def test_normalize_own_and_lane_opponent_and_rank() -> None:
     assert match.lane_opponent is not None
     assert match.lane_opponent.champion_name == "Red0"
     assert match.kill_participation == 53
+
+
+def test_collect_day_includes_current_rank() -> None:
+    http = FakeHttp()
+    queue_account(http)
+    queue_games(http, [riot_game(1, start_ms(30, 5))])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session).collect_day("热心市民张合#65360", date(2026, 10, 30))
+
+    assert collection.rank is not None
+    assert collection.rank.display() == "大师 277 胜点"
+    assert collection.rank.wins == 218
+
+
+def test_rank_failure_does_not_block_collection() -> None:
+    http = FakeHttp()
+    queue_account(http, with_rank=False)
+    http.queue_json(RANK_PATH, SqggRequestError("rank boom"))
+    queue_games(http, [riot_game(1, start_ms(30, 5))])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session).collect_day("热心市民张合#65360", date(2026, 10, 30))
+
+    assert collection.rank is None
+    assert "rank_unavailable" in collection.warnings
+    assert len(collection.matches) == 1
 
 
 def test_schema_changed_when_participant_missing() -> None:
