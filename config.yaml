@@ -20,6 +20,12 @@ accounts:
     server: "艾欧尼亚"
     environment: "HN1"
     enabled: true
+  - display_name: "余小C国服"
+    riot_id: "我真不混阿#23955"
+    provider: "sqgg"
+    server: "艾欧尼亚"
+    environment: "HN1"
+    enabled: true
 
 sqgg:
   email_env: "SQGG_EMAIL"
