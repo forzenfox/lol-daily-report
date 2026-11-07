@@ -1,0 +1,122 @@
+{
+  "account": "我心如铁石#43240",
+  "display_name": "凯哥",
+  "region": "kr",
+  "day": "2026-11-06",
+  "window": {
+    "start": "2026-11-06T00:00:00+08:00",
+    "end": "2026-11-07T00:00:00+08:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "complete": true,
+  "pages": 1,
+  "warnings": [],
+  "source": {
+    "provider": "sqgg",
+    "collector": "sgp-api",
+    "url": "https://sqgg.cc/summoner/%E8%89%BE%E6%AC%A7%E5%B0%BC%E4%BA%9A?gameName=%E6%88%91%E5%BF%83%E5%A6%82%E9%93%81%E7%9F%B3&tagLine=43240&puuid=fd8ed480-46de-51ba-a251-705ac420d884"
+  },
+  "fetched_at": "2026-11-07T00:46:49.037971+00:00",
+  "rank": {
+    "tier": "MASTER",
+    "division": null,
+    "league_points": 379,
+    "wins": 208,
+    "losses": 189,
+    "display": "大师 379 胜点"
+  },
+  "stats": {
+    "total_games": 1,
+    "wins": 1,
+    "losses": 0,
+    "win_rate": 100.0,
+    "kda": 6.0,
+    "avg_kills": 8.0,
+    "avg_deaths": 5.0,
+    "avg_assists": 22.0,
+    "avg_duration_seconds": 1969,
+    "avg_cs": 231.0,
+    "cs_per_min": 7.0,
+    "sample_sufficient": false,
+    "champions": [
+      {
+        "champion_key": "jayce",
+        "champion_name": "未来守护者",
+        "games": 1,
+        "wins": 1,
+        "losses": 0,
+        "win_rate": 100.0,
+        "kda": 6.0,
+        "avg_kills": 8.0,
+        "avg_deaths": 5.0,
+        "avg_assists": 22.0
+      }
+    ]
+  },
+  "titles": [],
+  "matches": [
+    {
+      "match_id": "HN1_11444915058",
+      "start_time": "2026-11-06T22:36:40.638000+08:00",
+      "duration_seconds": 1969,
+      "win": true,
+      "champion_key": "jayce",
+      "champion_name": "未来守护者",
+      "kills": 8,
+      "deaths": 5,
+      "assists": 22,
+      "cs": 231,
+      "position": "JUNGLE",
+      "queue_type": "SOLORANKED",
+      "queue_label": "单双排",
+      "game_map": "SUMMONERS_RIFT",
+      "kda_ratio": 6.0,
+      "cs_per_min": 7.04,
+      "op_score": 11.8,
+      "op_score_rank": 2,
+      "kill_participation": 68,
+      "own_performance": {
+        "summoner_name": "我心如铁石#43240",
+        "champion_key": "jayce",
+        "champion_name": "未来守护者",
+        "position": "JUNGLE",
+        "team_key": "RED",
+        "kills": 8,
+        "deaths": 5,
+        "assists": 22,
+        "cs": 231,
+        "gold_earned": 16999,
+        "damage_to_champions": 38337,
+        "damage_taken": 26474,
+        "vision_score": 37,
+        "team_kills": 44,
+        "op_score": 11.8,
+        "win": true,
+        "team_damage_to_champions": 164524,
+        "team_damage_taken": 170965
+      },
+      "lane_opponent": {
+        "summoner_name": "小丑请爱我一次#23589",
+        "champion_key": "sylas",
+        "champion_name": "解脱者",
+        "position": "JUNGLE",
+        "team_key": "BLUE",
+        "kills": 2,
+        "deaths": 8,
+        "assists": 10,
+        "cs": 223,
+        "gold_earned": 11586,
+        "damage_to_champions": 15492,
+        "damage_taken": 44524,
+        "vision_score": 44,
+        "team_kills": 31,
+        "op_score": 5.3,
+        "win": false,
+        "team_damage_to_champions": 139788,
+        "team_damage_taken": 193380
+      },
+      "source": "sqgg",
+      "fetched_at": "2026-11-07T00:46:49.037971+00:00"
+    }
+  ]
+}
