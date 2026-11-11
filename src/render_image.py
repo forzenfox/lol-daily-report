@@ -525,9 +525,9 @@ def _draw_radar_card(
     start_y = center[1] - (rows - 1) * row_height / 2
     value_font = find_font(int(22 * scale), options.font_paths)
     label_font = find_font(int(15 * scale), options.font_paths)
-    left_origin = left + padding
-    own_value_right = left_origin + 92 * scale
-    own_label_left = left_origin + 102 * scale
+    # 两侧镜像：账号数值贴左外缘、标签右对齐；对位标签左对齐、数值贴右外缘。
+    own_value_left = left + padding
+    own_label_right = own_value_left + _RADAR_SIDE_WIDTH * scale
     rival_label_left = right - padding - _RADAR_SIDE_WIDTH * scale
     rival_value_right = right - padding
 
@@ -537,13 +537,13 @@ def _draw_radar_card(
         own_value = _format_radar_value(label_index, detail.player_metrics[label_index])
         rival_value = _format_radar_value(label_index, detail.opponent_metrics[label_index])
         draw.text(
-            (own_value_right, y),
+            (own_value_left, y),
             own_value,
             font=value_font,
             fill=COLOR_LANE_SELF,
-            anchor="rm",
+            anchor="lm",
         )
-        draw.text((own_label_left, y), label, font=label_font, fill=COLOR_MUTED, anchor="lm")
+        draw.text((own_label_right, y), label, font=label_font, fill=COLOR_MUTED, anchor="rm")
         draw.text((rival_label_left, y), label, font=label_font, fill=COLOR_MUTED, anchor="lm")
         draw.text(
             (rival_value_right, y),
