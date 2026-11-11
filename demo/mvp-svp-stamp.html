@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MVP / SVP 印章效果 · 对位雷达 Demo</title>
+<style>
+  :root {
+    --bg: #070b14;
+    --panel: #0b1020;
+    --card: #151c33;
+    --line: #2a3450;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #c8a24a;
+    --self: #ff5c5c;
+    --rival: #32c8e0;
+    --mvp: #e8c566;
+    --svp: #93b9dc;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #101a33 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1140px; margin: 0 auto; padding: 44px 28px 90px; }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: .22em;
+    color: var(--accent);
+    border: 1px solid rgba(200, 162, 74, .35);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 12px; letter-spacing: .01em; }
+  .lede { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.9; max-width: 860px; }
+  .lede b { color: var(--text); font-weight: 600; }
+  .lede .gold { color: var(--mvp); }
+  .lede .silver { color: var(--svp); }
+
+  .controls {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin: 28px 0 6px;
+    padding: 18px 22px;
+    background: #0c1324;
+    border: 1px solid #1b2540;
+    border-radius: 14px;
+  }
+  .group-label {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .16em;
+    margin-bottom: 9px;
+  }
+  .seg { display: inline-flex; background: #070d1a; border: 1px solid #22304e; border-radius: 10px; padding: 3px; }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .16s ease;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active {
+    background: linear-gradient(180deg, #d9b763, #b98f36);
+    color: #10131c;
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(200, 162, 74, .28);
+  }
+
+  .scenario { margin-top: 40px; }
+  .scenario-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+  .scenario-index {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: .12em;
+  }
+  .scenario h2 { font-size: 17px; margin: 0; font-weight: 700; }
+  .scenario p { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .scenario p .tag-mvp { color: var(--mvp); font-weight: 700; }
+  .scenario p .tag-svp { color: var(--svp); font-weight: 700; }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid #17203a;
+    border-radius: 20px;
+    padding: 46px 64px;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .card {
+    position: relative;
+    width: 984px;
+    height: 360px;
+    flex: none;
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .38);
+    overflow: hidden;
+  }
+  .card-title {
+    position: absolute;
+    left: 22px;
+    top: 22px;
+    height: 30px;
+    line-height: 30px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    z-index: 4;
+    white-space: nowrap;
+  }
+  .card-title .vs { color: var(--muted); font-weight: 400; padding: 0 4px; }
+  .radar { position: absolute; left: 282px; top: 28px; width: 420px; height: 340px; z-index: 1; }
+
+  .vals { position: absolute; top: 102px; display: flex; flex-direction: column; z-index: 3; }
+  .vals.left { left: 22px; width: 230px; }
+  .vals.right { right: 22px; width: 230px; }
+  .vals .row { height: 32px; display: flex; align-items: center; font-size: 15px; color: var(--muted); }
+  .vals .num {
+    width: 92px;
+    text-align: right;
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .01em;
+  }
+  .vals.left .num { color: var(--self); width: auto; text-align: left; }
+  .vals.right .num { color: var(--rival); margin-left: auto; }
+  .vals.left .lbl { margin-left: auto; text-align: right; }
+  .vals.right .lbl { order: 0; }
+
+  .stamp-slot {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    transition: all .2s ease;
+  }
+  .stamp-slot[data-award="MVP"] { color: var(--mvp); }
+  .stamp-slot[data-award="SVP"] { color: var(--svp); }
+  .stamp-slot .stamp-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+  /* 位置：侧翼留白（默认） */
+  .demo[data-pos="side"] .stamp-slot.round, .demo[data-pos="side"] .stamp-slot.square { width: 106px; height: 106px; top: 145px; }
+  .demo[data-pos="side"] .stamp-slot.left { left: 262px; }
+  .demo[data-pos="side"] .stamp-slot.right { left: 616px; }
+
+  /* 位置：数值列压印 */
+  .demo[data-pos="column"] .stamp-slot.round, .demo[data-pos="column"] .stamp-slot.square { width: 176px; height: 176px; top: 110px; opacity: .42; }
+  .demo[data-pos="column"] .stamp-slot.left { left: 42px; }
+  .demo[data-pos="column"] .stamp-slot.right { left: 766px; }
+
+  /* 位置：雷达叠印 */
+  .demo[data-pos="overlay"] .stamp-slot.round, .demo[data-pos="overlay"] .stamp-slot.square { width: 124px; height: 124px; top: 136px; opacity: .68; }
+  .demo[data-pos="overlay"] .stamp-slot.left { left: 330px; }
+  .demo[data-pos="overlay"] .stamp-slot.right { left: 530px; }
+
+  .notes {
+    margin-top: 42px;
+    padding: 22px 26px;
+    border: 1px solid #1b2540;
+    border-radius: 14px;
+    background: #0c1324;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px;
+  }
+  .note h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); letter-spacing: .08em; }
+  .note p { margin: 0; font-size: 13px; line-height: 1.8; color: var(--muted); }
+  .note code { color: var(--text); font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+  @media (max-width: 1100px) {
+    .stage { overflow-x: auto; justify-content: flex-start; }
+    .notes { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="ink-rough" x="-25%" y="-25%" width="150%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.62" numOctaves="2" seed="9" result="noise"/>
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0
+                                                     0 0 0 0 0
+                                                     0 0 0 0 0
+                                                     0 0 0 -2.15 1.68" result="erode"/>
+      <feComposite in="SourceGraphic" in2="erode" operator="in"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="page demo" data-pos="side" data-style="square">
+  <span class="eyebrow">REVIEW · 效果方案</span>
+  <h1>对位雷达 · MVP / SVP 印章标注</h1>
+  <p class="lede">
+    规则：单局内 <b class="gold">胜方 OP 评分最高 = MVP</b>，<b class="silver">败方 OP 评分最高 = SVP</b>；
+    仅当<b>当前账号</b>或<b>对位玩家</b>获得时，才在对位雷达卡片上盖章。
+    左侧对应账号，右侧对应对位；同一局可能出现「账号 MVP + 对位 SVP」双章。
+    以下卡片按 1080 宽度的战报图 1:1 还原，可切换印章样式与位置。
+  </p>
+
+  <div class="controls">
+    <div class="group">
+      <div class="group-label">印章样式</div>
+      <div class="seg" data-control="style">
+        <button data-value="round">圆形钢印</button>
+        <button data-value="square" class="active">方形印章（推荐）</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-label">印章位置</div>
+      <div class="seg" data-control="pos">
+        <button data-value="side" class="active">雷达侧翼（推荐）</button>
+        <button data-value="column">数值列压印</button>
+        <button data-value="overlay">雷达叠印</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scenarios"></div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>判定口径</h3>
+      <p>MVP = 胜方 5 人中 OP 评分最高者；SVP = 败方 5 人中最高者。数据源已返回每名参战者 <code>op_score</code>，无需额外请求。</p>
+    </div>
+    <div class="note">
+      <h3>颜色语义</h3>
+      <p><b style="color:var(--mvp)">金色</b> 对应 MVP，<b style="color:var(--svp)">冷银蓝</b> 对应 SVP；与现有「账号红 / 对位青」配色不冲突。</p>
+    </div>
+    <div class="note">
+      <h3>实现方式</h3>
+      <p>正式战报仍用 Pillow 绘制：印章由圆环、文字与噪点做旧遮罩合成，不使用外部图片素材，结果可复现。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const RADAR_LABELS = ["分均补刀", "KDA", "伤转", "参团率", "承伤占比", "伤害占比"];
+  const SIDE_ROWS = [
+    { label: "分均补刀/min", self: "5.51", rival: "6.25" },
+    { label: "伤害占比%", self: "22.23", rival: "25.51" },
+    { label: "承伤占比%", self: "24.85", rival: "17.40" },
+    { label: "参团率%", self: "66.67", rival: "50.00" },
+    { label: "伤转%", self: "250.27", rival: "220.76" },
+    { label: "KDA", self: "4.8", rival: "3.1" }
+  ];
+  const SELF_RADAR = [0.551, 0.400, 1.000, 0.833, 0.497, 0.741];
+  const RIVAL_RADAR = [0.625, 0.258, 1.000, 0.625, 0.348, 0.850];
+
+  const SCENARIOS = [
+    {
+      index: "SCENE 01",
+      title: "账号拿下 MVP",
+      desc: '账号为胜方最高分，在雷达<b>左侧</b>盖 <span class="tag-mvp">MVP</span> 印章；对位无标注。',
+      cardTitle: "#1 15:25 · 百裂冥犬 vs 蜘蛛女皇",
+      selfAward: "MVP",
+      rivalAward: null
+    },
+    {
+      index: "SCENE 02",
+      title: "对位拿下 SVP",
+      desc: '账号落败，对位为败方最高分，在雷达<b>右侧</b>盖 <span class="tag-svp">SVP</span> 印章。',
+      cardTitle: "#2 16:42 · 离群之刺 vs 暗裔剑魔",
+      selfAward: null,
+      rivalAward: "SVP"
+    },
+    {
+      index: "SCENE 03",
+      title: "同局双章：账号 MVP + 对位 SVP",
+      desc: '账号在胜方、对位在败方且各自队内评分最高，左右各盖一枚，形成对照。',
+      cardTitle: "#3 18:33 · 百裂冥犬 vs 蜘蛛女皇",
+      selfAward: "MVP",
+      rivalAward: "SVP"
+    }
+  ];
+
+  const RADAR_C = 210;
+  const RADAR_CY = 170;
+  const RADAR_R = 100;
+
+  function radarSvg() {
+    const angles = RADAR_LABELS.map((_, i) => -Math.PI / 2 + (2 * Math.PI * i) / RADAR_LABELS.length);
+    const pt = (value, angle, radius = RADAR_R) => [
+      RADAR_C + radius * value * Math.cos(angle),
+      RADAR_CY + radius * value * Math.sin(angle)
+    ];
+    const polygon = (values, radius) =>
+      values.map((value, i) => pt(value, angles[i], radius).map(n => n.toFixed(2)).join(",")).join(" ");
+
+    let rings = "";
+    for (let ring = 1; ring <= 4; ring += 1) {
+      rings += `<polygon points="${polygon([1, 1, 1, 1, 1, 1], (RADAR_R * ring) / 4)}"
+        fill="none" stroke="#2a3450" stroke-width="1"/>`;
+    }
+    const axes = angles
+      .map(angle => {
+        const [x, y] = pt(1, angle);
+        return `<line x1="${RADAR_C}" y1="${RADAR_CY}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}"
+          stroke="#2a3450" stroke-width="2"/>`;
+      })
+      .join("");
+    const labels = RADAR_LABELS.map((label, i) => {
+      const [x, y] = pt(1, angles[i], RADAR_R + 26);
+      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle"
+        dominant-baseline="middle" font-size="18" fill="#8b949e">${label}</text>`;
+    }).join("");
+
+    return `
+      ${rings}${axes}
+      <polygon points="${polygon(SELF_RADAR)}" fill="rgba(255,92,92,.18)" stroke="#ff5c5c" stroke-width="2"/>
+      <polygon points="${polygon(RIVAL_RADAR)}" fill="rgba(50,200,224,.12)" stroke="#32c8e0" stroke-width="2"/>
+      ${labels}`;
+  }
+
+  function roundSeal(award, sub) {
+    let ticks = "";
+    for (let i = 0; i < 24; i += 1) {
+      const angle = (i * 15 * Math.PI) / 180;
+      const x1 = 100 + 78 * Math.cos(angle);
+      const y1 = 100 + 78 * Math.sin(angle);
+      const x2 = 100 + 84 * Math.cos(angle);
+      const y2 = 100 + 84 * Math.sin(angle);
+      ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="2.2"/>`;
+    }
+    return `<svg class="stamp-svg" viewBox="0 0 200 200" aria-hidden="true">
+      <g filter="url(#ink-rough)" transform="rotate(-13 100 100)" fill="none" stroke="currentColor">
+        <circle cx="100" cy="100" r="90" stroke-width="8"/>
+        <circle cx="100" cy="100" r="72" stroke-width="2.2"/>
+        ${ticks}
+        <text x="100" y="97" text-anchor="middle" font-size="54" font-weight="900"
+          letter-spacing="1" fill="currentColor" stroke="none">${award}</text>
+        <text x="100" y="133" text-anchor="middle" font-size="17" font-weight="700"
+          letter-spacing="6" fill="currentColor" stroke="none">${sub}</text>
+      </g>
+    </svg>`;
+  }
+
+  function squareSeal(award, sub) {
+    return `<svg class="stamp-svg" viewBox="0 0 200 200" aria-hidden="true">
+      <g filter="url(#ink-rough)" transform="rotate(-7 100 100)" fill="none" stroke="currentColor">
+        <rect x="16" y="16" width="168" height="168" rx="12" stroke-width="10"/>
+        <rect x="30" y="30" width="140" height="140" rx="6" stroke-width="2.2"/>
+        <text x="100" y="99" text-anchor="middle" font-size="56" font-weight="900"
+          letter-spacing="2" fill="currentColor" stroke="none">${award}</text>
+        <text x="100" y="136" text-anchor="middle" font-size="18" font-weight="700"
+          letter-spacing="8" fill="currentColor" stroke="none">${sub}</text>
+      </g>
+    </svg>`;
+  }
+
+  function stampMarkup(award, style) {
+    const sub = award === "MVP" ? "全场最佳" : "败方最佳";
+    if (style === "square") return squareSeal(award, sub);
+    return roundSeal(award, sub);
+  }
+
+  function valueColumns() {
+    const left = SIDE_ROWS.map(row =>
+      `<div class="row"><span class="num">${row.self}</span><span class="lbl">${row.label}</span></div>`
+    ).join("");
+    const right = SIDE_ROWS.map(row =>
+      `<div class="row"><span class="lbl">${row.label}</span><span class="num">${row.rival}</span></div>`
+    ).join("");
+    return `<div class="vals left">${left}</div><div class="vals right">${right}</div>`;
+  }
+
+  function cardHtml(scene) {
+    const [selfChampion, rivalChampion] = scene.cardTitle.split("· ")[1].split(" vs ");
+    const heading = scene.cardTitle.split("· ")[0];
+    const style = document.querySelector('.demo').dataset.style;
+    const leftStamp = scene.selfAward
+      ? `<div class="stamp-slot left ${style}" data-award="${scene.selfAward}">${stampMarkup(scene.selfAward, style)}</div>`
+      : "";
+    const rightStamp = scene.rivalAward
+      ? `<div class="stamp-slot right ${style}" data-award="${scene.rivalAward}">${stampMarkup(scene.rivalAward, style)}</div>`
+      : "";
+
+    return `
+      <section class="scenario">
+        <div class="scenario-head">
+          <span class="scenario-index">${scene.index}</span>
+          <h2>${scene.title}</h2>
+        </div>
+        <p>${scene.desc}</p>
+        <div class="stage">
+          <div class="card">
+            <div class="card-title">${heading} · ${selfChampion}<span class="vs">vs</span>${rivalChampion}</div>
+            <svg class="radar" viewBox="0 0 420 340">${radarSvg()}</svg>
+            ${valueColumns()}
+            ${leftStamp}${rightStamp}
+          </div>
+        </div>
+      </section>`;
+  }
+
+  function render() {
+    document.getElementById("scenarios").innerHTML = SCENARIOS.map(cardHtml).join("");
+  }
+
+  document.querySelectorAll(".seg").forEach(seg => {
+    seg.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      seg.querySelectorAll("button").forEach(item => item.classList.toggle("active", item === button));
+      const demo = document.querySelector(".demo");
+      if (seg.dataset.control === "style") demo.dataset.style = button.dataset.value;
+      else demo.dataset.pos = button.dataset.value;
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>

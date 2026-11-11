@@ -246,6 +246,7 @@ def _performance_payload(performance: ParticipantPerformance | None) -> dict[str
         "win": performance.win,
         "team_damage_to_champions": performance.team_damage_to_champions,
         "team_damage_taken": performance.team_damage_taken,
+        "award": performance.award,
     }
 
 
@@ -372,6 +373,7 @@ def _performance_from_payload(payload: Any) -> ParticipantPerformance | None:
     if not isinstance(payload, dict):
         return None
     op_score = payload.get("op_score")
+    award = payload.get("award")
     return ParticipantPerformance(
         summoner_name=str(payload.get("summoner_name") or ""),
         champion_key=str(payload.get("champion_key") or ""),
@@ -391,6 +393,7 @@ def _performance_from_payload(payload: Any) -> ParticipantPerformance | None:
         win=bool(payload.get("win")),
         team_damage_to_champions=int(payload.get("team_damage_to_champions") or 0),
         team_damage_taken=int(payload.get("team_damage_taken") or 0),
+        award=award if award in ("MVP", "SVP") else None,
     )
 
 

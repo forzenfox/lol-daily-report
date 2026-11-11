@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from match_details import RADAR_LABELS, MatchDetail
 from report import ReportContext
@@ -80,6 +81,18 @@ _RADAR_SIDE_LABELS: tuple[str, ...] = (
 
 COLOR_LANE_SELF = "#FF5C5C"
 COLOR_LANE_RIVAL = "#32C8E0"
+COLOR_AWARD_MVP = "#E8C566"
+COLOR_AWARD_SVP = "#93B9DC"
+
+# MVP / SVP 印章：方形做旧印章，盖在对位雷达左右两侧的留白处。
+_AWARD_COLORS: dict[str, str] = {"MVP": COLOR_AWARD_MVP, "SVP": COLOR_AWARD_SVP}
+_AWARD_LABELS: dict[str, str] = {"MVP": "全场最佳", "SVP": "败方最佳"}
+_AWARD_STAMP_SIZE = 106
+_AWARD_STAMP_TOP = 145
+_AWARD_STAMP_LEFT = 262
+_AWARD_STAMP_RIGHT = 616
+_AWARD_STAMP_SUPERSAMPLE = 4
+_AWARD_STAMP_SEED = 20261111
 
 
 class ImageRenderError(RuntimeError):
@@ -404,6 +417,120 @@ def _draw_dual_radar(
         draw.text((label_x, label_y), label, font=label_font, fill=COLOR_MUTED, anchor="mm")
 
 
+def _draw_spaced_text(
+    draw: ImageDraw.ImageDraw,
+    center: tuple[float, float],
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    fill: tuple[int, int, int, int],
+    spacing: float,
+) -> None:
+    """按固定字距水平居中绘制文本（Pillow 不支持 letter-spacing）。"""
+    widths = [draw.textlength(char, font=font) for char in text]
+    total = sum(widths) + spacing * max(len(text) - 1, 0)
+    x = center[0] - total / 2
+    for char, width in zip(text, widths):
+        draw.text((x, center[1]), char, font=font, fill=fill, anchor="lm")
+        x += width + spacing
+
+
+def _erode_ink(layer: Image.Image, seed: int) -> Image.Image:
+    """用固定种子的噪点遮罩做旧，保证同一构建的渲染结果可复现。"""
+    width, height = layer.size
+    rng = random.Random(seed)
+    columns = max(4, width // 12)
+    rows = max(4, height // 12)
+    data = bytes(rng.getrandbits(8) for _ in range(columns * rows))
+    noise = Image.frombytes("L", (columns, rows), data).resize((width, height), Image.BICUBIC)
+    mask = noise.point(lambda value: 0 if value < 38 else 255)
+    layer.putalpha(ImageChops.multiply(layer.getchannel("A"), mask))
+    return layer
+
+
+def _draw_award_stamp(
+    image: Image.Image,
+    award: str | None,
+    box: tuple[float, float, float, float],
+    options: ImageOptions,
+) -> None:
+    """在指定方框内盖一枚 MVP / SVP 方形印章。"""
+    if award not in _AWARD_COLORS:
+        return
+    left, top, right, bottom = box
+    size = max(1, round(right - left))
+    canvas = size * _AWARD_STAMP_SUPERSAMPLE
+    unit = canvas / 200.0
+    layer = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    ink = (*_hex_to_rgb(_AWARD_COLORS[award]), 255)
+
+    def scaled(value: float) -> float:
+        return value * unit
+
+    draw.rounded_rectangle(
+        (scaled(16), scaled(16), scaled(184), scaled(184)),
+        radius=scaled(12),
+        outline=ink,
+        width=max(1, round(scaled(10))),
+    )
+    draw.rounded_rectangle(
+        (scaled(30), scaled(30), scaled(170), scaled(170)),
+        radius=scaled(6),
+        outline=ink,
+        width=max(1, round(scaled(2.2))),
+    )
+    title_font = find_font(int(scaled(56)), options.font_paths)
+    subtitle_font = find_font(int(scaled(18)), options.font_paths)
+    draw.text((scaled(100), scaled(88)), award, font=title_font, fill=ink, anchor="mm")
+    _draw_spaced_text(
+        draw,
+        (scaled(100), scaled(136)),
+        _AWARD_LABELS[award],
+        subtitle_font,
+        ink,
+        spacing=scaled(7),
+    )
+
+    layer = _erode_ink(layer, _AWARD_STAMP_SEED)
+    rotated = layer.rotate(7, resample=Image.BICUBIC, expand=True)
+    stamp = rotated.resize(
+        (
+            max(1, round(rotated.width / _AWARD_STAMP_SUPERSAMPLE)),
+            max(1, round(rotated.height / _AWARD_STAMP_SUPERSAMPLE)),
+        ),
+        Image.LANCZOS,
+    )
+    image.paste(
+        stamp,
+        (
+            round((left + right) / 2 - stamp.width / 2),
+            round((top + bottom) / 2 - stamp.height / 2),
+        ),
+        stamp,
+    )
+
+
+def _draw_award_stamps(
+    image: Image.Image,
+    detail: MatchDetail,
+    card_box: tuple[float, float, float, float],
+    options: ImageOptions,
+    scale: float,
+) -> None:
+    """账号印章盖在雷达左侧，对位印章盖在右侧。"""
+    left, top, _right, _bottom = card_box
+    size = _AWARD_STAMP_SIZE * scale
+    for award, offset in (
+        (detail.player_award, _AWARD_STAMP_LEFT),
+        (detail.opponent_award, _AWARD_STAMP_RIGHT),
+    ):
+        if not award:
+            continue
+        x = left + offset * scale
+        y = top + _AWARD_STAMP_TOP * scale
+        _draw_award_stamp(image, award, (x, y, x + size, y + size), options)
+
+
 def _draw_detail_table(
     draw: ImageDraw.ImageDraw,
     details: Sequence[MatchDetail],
@@ -477,6 +604,7 @@ def _format_radar_value(label_index: int, value: float) -> str:
 
 
 def _draw_radar_card(
+    image: Image.Image,
     draw: ImageDraw.ImageDraw,
     box: tuple[float, float, float, float],
     index: int,
@@ -519,15 +647,16 @@ def _draw_radar_card(
         options,
         scale,
     )
+    _draw_award_stamps(image, detail, box, options, scale)
 
     rows = len(_RADAR_SIDE_ORDER)
     row_height = _RADAR_SIDE_ROW_HEIGHT * scale
     start_y = center[1] - (rows - 1) * row_height / 2
     value_font = find_font(int(22 * scale), options.font_paths)
     label_font = find_font(int(15 * scale), options.font_paths)
-    left_origin = left + padding
-    own_value_right = left_origin + 92 * scale
-    own_label_left = left_origin + 102 * scale
+    # 两侧镜像：账号数值贴左外缘、标签右对齐；对位标签左对齐、数值贴右外缘。
+    own_value_left = left + padding
+    own_label_right = own_value_left + _RADAR_SIDE_WIDTH * scale
     rival_label_left = right - padding - _RADAR_SIDE_WIDTH * scale
     rival_value_right = right - padding
 
@@ -537,13 +666,13 @@ def _draw_radar_card(
         own_value = _format_radar_value(label_index, detail.player_metrics[label_index])
         rival_value = _format_radar_value(label_index, detail.opponent_metrics[label_index])
         draw.text(
-            (own_value_right, y),
+            (own_value_left, y),
             own_value,
             font=value_font,
             fill=COLOR_LANE_SELF,
-            anchor="rm",
+            anchor="lm",
         )
-        draw.text((own_label_left, y), label, font=label_font, fill=COLOR_MUTED, anchor="lm")
+        draw.text((own_label_right, y), label, font=label_font, fill=COLOR_MUTED, anchor="rm")
         draw.text((rival_label_left, y), label, font=label_font, fill=COLOR_MUTED, anchor="lm")
         draw.text(
             (rival_value_right, y),
@@ -555,6 +684,7 @@ def _draw_radar_card(
 
 
 def _draw_radar_section(
+    image: Image.Image,
     draw: ImageDraw.ImageDraw,
     details: Sequence[MatchDetail],
     layout: _DetailsLayout,
@@ -608,6 +738,7 @@ def _draw_radar_section(
     for position, (index, detail) in enumerate(items):
         top = layout.grid_top + position * (layout.card_height + _RADAR_CARD_GAP * scale)
         _draw_radar_card(
+            image,
             draw,
             (
                 margin,
@@ -861,7 +992,7 @@ def render_report_image(
         section_font = find_font(int(34 * scale), active.font_paths)
         draw.text((margin, layout.title_top), "对局明细", font=section_font, fill=COLOR_TEXT)
         _draw_detail_table(draw, details, layout, margin, inner_width, active, scale)
-        _draw_radar_section(draw, details, layout, margin, inner_width, active, scale)
+        _draw_radar_section(image, draw, details, layout, margin, inner_width, active, scale)
 
     footer_top = height - 96 * scale
     footer_font = find_font(int(20 * scale), active.font_paths)

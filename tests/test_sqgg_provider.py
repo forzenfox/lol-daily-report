@@ -636,6 +636,67 @@ def test_normalize_own_and_lane_opponent_and_rank() -> None:
     assert match.kill_participation == 53
 
 
+def collect_single_match(game: dict):
+    http = FakeHttp()
+    queue_account(http)
+    queue_games(http, [game])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+    return (
+        make_provider(http, session)
+        .collect_day("热心市民张合#65360", date(2026, 10, 30))
+        .matches[0]
+    )
+
+
+def test_marks_team_best_as_mvp_and_svp() -> None:
+    match = collect_single_match(riot_game(1, start_ms(30, 5), own_score=10.5))
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "MVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "SVP"
+
+
+def test_award_is_none_when_account_is_not_team_best() -> None:
+    game = riot_game(1, start_ms(30, 5), own_score=10.5)
+    game["horse"]["blue-1"]["score"] = 11.0
+    match = collect_single_match(game)
+
+    assert match.own_performance is not None
+    assert match.own_performance.award is None
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "SVP"
+
+
+def test_award_is_none_when_opponent_is_not_team_best() -> None:
+    game = riot_game(1, start_ms(30, 5), own_score=10.5)
+    game["horse"]["red-1"]["score"] = 6.5
+    match = collect_single_match(game)
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "MVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award is None
+
+
+def test_award_requires_positive_score() -> None:
+    game = riot_game(1, start_ms(30, 5), own_score=10.5)
+    game["horse"][PUUID]["score"] = 0
+    match = collect_single_match(game)
+
+    assert match.own_performance is not None
+    assert match.own_performance.award is None
+
+
+def test_losing_team_best_is_svp() -> None:
+    match = collect_single_match(riot_game(1, start_ms(30, 5), own_score=10.5, own_win=False))
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "SVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "MVP"
+
+
 def test_collect_day_includes_current_rank() -> None:
     http = FakeHttp()
     queue_account(http)

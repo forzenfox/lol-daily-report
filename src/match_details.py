@@ -32,6 +32,15 @@ class MatchDetail:
     player_radar: tuple[float, ...] = ()
     opponent_radar: tuple[float, ...] = ()
 
+    @property
+    def player_award(self) -> str | None:
+        performance = self.match.own_performance
+        return performance.award if performance is not None else None
+
+    @property
+    def opponent_award(self) -> str | None:
+        return self.opponent.award if self.opponent is not None else None
+
 
 def match_metrics(
     performance: ParticipantPerformance | None, duration_seconds: int
