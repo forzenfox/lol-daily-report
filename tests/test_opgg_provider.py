@@ -484,6 +484,84 @@ def test_maps_own_performance_with_extended_stats() -> None:
     assert own.win is True
 
 
+def set_team_scores(game: dict, blue_scores: list[float], red_scores: list[float]) -> None:
+    for member, score in zip(game["team_blue"], blue_scores):
+        member["stats"]["op_score"] = score
+    for member, score in zip(game["team_red"], red_scores):
+        member["stats"]["op_score"] = score
+
+
+def test_marks_team_best_as_mvp_and_svp() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    set_team_scores(game, [9.0, 7.0, 6.0, 5.0, 4.0], [8.0, 7.0, 6.0, 5.0, 4.0])
+    fake = FakeHttp(batches=[[game]])
+
+    match = make_provider(fake).collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "MVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "SVP"
+
+
+def test_award_is_none_when_account_is_not_team_best() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    # 蓝色方打野分数高于本人；红色方仍是 TOP 最高。
+    set_team_scores(game, [7.0, 9.0, 6.0, 5.0, 4.0], [8.0, 7.0, 6.0, 5.0, 4.0])
+    fake = FakeHttp(batches=[[game]])
+
+    match = make_provider(fake).collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.own_performance.award is None
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "SVP"
+
+
+def test_award_is_none_when_opponent_is_not_team_best() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    # 红色方打野分数高于对位 TOP。
+    set_team_scores(game, [9.0, 7.0, 6.0, 5.0, 4.0], [6.0, 7.5, 5.0, 4.0, 3.0])
+    fake = FakeHttp(batches=[[game]])
+
+    match = make_provider(fake).collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "MVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award is None
+
+
+def test_award_requires_valid_op_score() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    set_team_scores(game, [9.0, 7.0, 6.0, 5.0, 4.0], [8.0, 7.0, 6.0, 5.0, 4.0])
+    game["team_blue"][0]["stats"]["op_score"] = None
+    fake = FakeHttp(batches=[[game]])
+
+    match = make_provider(fake).collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.own_performance.op_score is None
+    assert match.own_performance.award is None
+
+
+def test_losing_team_best_is_svp() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00", game_result="LOSE")
+    for member in game["team_blue"]:
+        member["stats"]["result"] = "LOSE"
+    for member in game["team_red"]:
+        member["stats"]["result"] = "WIN"
+    set_team_scores(game, [9.0, 7.0, 6.0, 5.0, 4.0], [8.0, 7.0, 6.0, 5.0, 4.0])
+    fake = FakeHttp(batches=[[game]])
+
+    match = make_provider(fake).collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20)).matches[0]
+
+    assert match.own_performance is not None
+    assert match.own_performance.award == "SVP"
+    assert match.lane_opponent is not None
+    assert match.lane_opponent.award == "MVP"
+
+
 def test_lane_opponent_is_none_when_position_is_missing() -> None:
     game = build_game("m_1", "2026-10-20T22:00:00+09:00", position=None)
     for member in game["team_blue"]:

@@ -92,6 +92,7 @@ class ParticipantPerformance:
     win: bool
     team_damage_to_champions: int = 0
     team_damage_taken: int = 0
+    award: str | None = None
 
 
 @dataclass(frozen=True)
@@ -484,7 +485,13 @@ class OpggProvider:
             return None, None
 
         own_team_kills, own_team_damage, own_team_taken = _team_totals(own_team)
-        own_performance = _to_performance(own, own_team_kills, own_team_damage, own_team_taken)
+        own_performance = _to_performance(
+            own,
+            own_team_kills,
+            own_team_damage,
+            own_team_taken,
+            award=_team_award(own_team, own),
+        )
         position = own.get("position")
         if not position:
             return own_performance, None
@@ -494,7 +501,11 @@ class OpggProvider:
             return own_performance, None
         rival_kills, rival_damage, rival_taken = _team_totals(other_team)
         return own_performance, _to_performance(
-            candidates[0], rival_kills, rival_damage, rival_taken
+            candidates[0],
+            rival_kills,
+            rival_damage,
+            rival_taken,
+            award=_team_award(other_team, candidates[0]),
         )
 
 
@@ -509,6 +520,27 @@ def _team_totals(participants: list[dict[str, Any]]) -> tuple[int, int, int]:
     return kills, damage, damage_taken
 
 
+def _team_award(team: list[dict[str, Any]], participant: dict[str, Any]) -> str | None:
+    """胜方队内 OP 评分最高为 MVP，败方最高为 SVP；缺分或缺胜负时不判定。"""
+    stats = participant.get("stats") or {}
+    own_score = stats.get("op_score")
+    if not isinstance(own_score, int | float) or own_score <= 0:
+        return None
+    scores: list[float] = []
+    for item in team:
+        value = (item.get("stats") or {}).get("op_score")
+        if isinstance(value, int | float) and value > 0:
+            scores.append(value)
+    if not scores or own_score < max(scores):
+        return None
+    result = stats.get("result")
+    if result == "WIN":
+        return "MVP"
+    if result == "LOSE":
+        return "SVP"
+    return None
+
+
 def _valid_rank(value: Any) -> int | None:
     """竞技场等模式会返回 0，只有 1~10 才是有效的队内 OP 评分排名。"""
     if isinstance(value, int) and 1 <= value <= 10:
@@ -521,6 +553,8 @@ def _to_performance(
     team_kills: int,
     team_damage_to_champions: int,
     team_damage_taken: int,
+    *,
+    award: str | None = None,
 ) -> ParticipantPerformance:
     stats = participant.get("stats") or {}
     champion = participant.get("champion") or {}
@@ -548,4 +582,5 @@ def _to_performance(
         win=stats.get("result") == "WIN",
         team_damage_to_champions=team_damage_to_champions,
         team_damage_taken=team_damage_taken,
+        award=award,
     )

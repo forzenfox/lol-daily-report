@@ -13,6 +13,8 @@ from match_details import compute_match_details
 from providers.opgg import NormalizedMatch, ParticipantPerformance
 from rank import RankInfo
 from render_image import (
+    COLOR_AWARD_MVP,
+    COLOR_AWARD_SVP,
     DEFAULT_FONT_CANDIDATES,
     ImageOptions,
     ImageRenderError,
@@ -43,6 +45,7 @@ def make_performance(
     damage: int = 12000,
     vision: int = 30,
     team_kills: int = 10,
+    award: str | None = None,
 ) -> ParticipantPerformance:
     return ParticipantPerformance(
         summoner_name="Opponent#KR1",
@@ -63,10 +66,11 @@ def make_performance(
         team_damage_taken=70000,
         op_score=4.1,
         win=False,
+        award=award,
     )
 
 
-def own_performance() -> ParticipantPerformance:
+def own_performance(award: str | None = None) -> ParticipantPerformance:
     return ParticipantPerformance(
         summoner_name="斗鱼丶胡凯利#2862",
         champion_key="yorick",
@@ -86,6 +90,7 @@ def own_performance() -> ParticipantPerformance:
         team_damage_taken=70000,
         op_score=4.8,
         win=True,
+        award=award,
     )
 
 
@@ -474,3 +479,56 @@ def test_each_lane_radar_takes_its_own_full_width_row() -> None:
 
     # 参照图的单场布局（左数值 + 中雷达 + 右数值）独占一行，第二场必须继续加高。
     assert two.height > one.height
+
+
+def _color_positions(
+    image: Image.Image, hex_color: str, tolerance: int = 12
+) -> list[tuple[int, int]]:
+    target = tuple(int(hex_color.lstrip("#")[index : index + 2], 16) for index in (0, 2, 4))
+    pixels = image.convert("RGB").load()
+    positions: list[tuple[int, int]] = []
+    for y in range(image.height):
+        for x in range(image.width):
+            color = pixels[x, y]
+            if all(abs(color[channel] - target[channel]) <= tolerance for channel in range(3)):
+                positions.append((x, y))
+    return positions
+
+
+def test_render_stamps_awards_on_their_own_side() -> None:
+    match = make_match(
+        "m1",
+        own=own_performance("MVP"),
+        opponent=make_performance(award="SVP"),
+    )
+    stats = compute_daily_stats([match], minimum_games=1)
+
+    image = render_report_image(
+        stats,
+        make_context(),
+        options=small_options(),
+        details=compute_match_details([match]),
+    )
+
+    mvp_positions = _color_positions(image, COLOR_AWARD_MVP)
+    svp_positions = _color_positions(image, COLOR_AWARD_SVP)
+
+    assert len(mvp_positions) > 5
+    assert len(svp_positions) > 5
+    assert all(x < image.width / 2 for x, _y in mvp_positions)
+    assert all(x > image.width / 2 for x, _y in svp_positions)
+
+
+def test_render_omits_award_stamps_without_awards() -> None:
+    match = make_match("m1", own=own_performance(), opponent=make_performance())
+    stats = compute_daily_stats([match], minimum_games=1)
+
+    image = render_report_image(
+        stats,
+        make_context(),
+        options=small_options(),
+        details=compute_match_details([match]),
+    )
+
+    assert _color_positions(image, COLOR_AWARD_MVP) == []
+    assert _color_positions(image, COLOR_AWARD_SVP) == []

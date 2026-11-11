@@ -813,10 +813,22 @@ class SqggProvider:
                 )
                 rival_taken = sum(int(item.get("totalDamageTaken") or 0) for item in rival_team)
                 lane_opponent = _to_performance(
-                    rival, rival_kills, rival_damage, rival_taken, horse
+                    rival,
+                    rival_kills,
+                    rival_damage,
+                    rival_taken,
+                    horse,
+                    award=_team_award(rival_team, rival, horse),
                 )
 
-        own_performance = _to_performance(own, team_kills, team_damage, team_taken, horse)
+        own_performance = _to_performance(
+            own,
+            team_kills,
+            team_damage,
+            team_taken,
+            horse,
+            award=_team_award(team, own, horse),
+        )
         champion_name = str(own["championName"])
         kills = int(own["kills"])
         deaths = int(own["deaths"])
@@ -907,12 +919,36 @@ def _op_score_rank(horse: Mapping[str, Any], puuid: str) -> int | None:
     return rank if 1 <= rank <= 10 else None
 
 
+def _team_award(
+    team: list[Mapping[str, Any]], participant: Mapping[str, Any], horse: Mapping[str, Any]
+) -> str | None:
+    """胜方队内评分最高为 MVP，败方最高为 SVP；缺分或缺胜负时不判定。"""
+    own_score = _safe_float((horse.get(participant.get("puuid")) or {}).get("score"))
+    if own_score is None or own_score <= 0:
+        return None
+    scores: list[float] = []
+    for member in team:
+        score = _safe_float((horse.get(member.get("puuid")) or {}).get("score"))
+        if score is not None and score > 0:
+            scores.append(score)
+    if not scores or own_score < max(scores):
+        return None
+    win = participant.get("win")
+    if win is True:
+        return "MVP"
+    if win is False:
+        return "SVP"
+    return None
+
+
 def _to_performance(
     participant: Mapping[str, Any],
     team_kills: int,
     team_damage_to_champions: int,
     team_damage_taken: int,
     horse: Mapping[str, Any],
+    *,
+    award: str | None = None,
 ) -> ParticipantPerformance:
     game_name = str(participant.get("riotIdGameName") or participant.get("summonerName") or "")
     tag_line = str(participant.get("riotIdTagline") or "")
@@ -939,6 +975,7 @@ def _to_performance(
         win=bool(participant.get("win")),
         team_damage_to_champions=team_damage_to_champions,
         team_damage_taken=team_damage_taken,
+        award=award,
     )
 
 

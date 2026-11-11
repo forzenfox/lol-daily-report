@@ -35,6 +35,7 @@ def performance(
     team_kills: int = 10,
     team_damage: int = 80000,
     team_damage_taken: int = 70000,
+    award: str | None = None,
 ) -> ParticipantPerformance:
     return ParticipantPerformance(
         summoner_name="Opponent#KR1",
@@ -55,6 +56,7 @@ def performance(
         team_damage_taken=team_damage_taken,
         op_score=4.1,
         win=False,
+        award=award,
     )
 
 
@@ -91,7 +93,7 @@ def make_match(
     )
 
 
-def own_performance() -> ParticipantPerformance:
+def own_performance(award: str | None = None) -> ParticipantPerformance:
     return ParticipantPerformance(
         summoner_name="斗鱼丶胡凯利#2862",
         champion_key="yorick",
@@ -111,6 +113,7 @@ def own_performance() -> ParticipantPerformance:
         team_damage_taken=70000,
         op_score=4.8,
         win=True,
+        award=award,
     )
 
 
@@ -226,3 +229,19 @@ def test_compute_match_details_deduplicates_by_match_id() -> None:
     details = compute_match_details([first, duplicate, second])
 
     assert [detail.match.match_id for detail in details] == ["m1", "m2"]
+
+
+def test_detail_exposes_player_and_opponent_awards() -> None:
+    detail = build_match_detail(
+        make_match(own=own_performance("MVP"), opponent=performance(award="SVP"))
+    )
+
+    assert detail.player_award == "MVP"
+    assert detail.opponent_award == "SVP"
+
+
+def test_detail_awards_are_none_without_performance() -> None:
+    detail = build_match_detail(make_match())
+
+    assert detail.player_award is None
+    assert detail.opponent_award is None

@@ -34,7 +34,11 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
 def make_performance(
-    champion_name: str = "Darius", *, team_key: str = "RED", win: bool = False
+    champion_name: str = "Darius",
+    *,
+    team_key: str = "RED",
+    win: bool = False,
+    award: str | None = None,
 ) -> ParticipantPerformance:
     return ParticipantPerformance(
         summoner_name="Opponent#KR1",
@@ -55,6 +59,7 @@ def make_performance(
         team_damage_taken=70000,
         op_score=4.1,
         win=win,
+        award=award,
     )
 
 
@@ -131,8 +136,8 @@ def make_collection(account: str = "斗鱼丶胡凯利#2862") -> DayCollection:
         make_match(
             "m1",
             win=True,
-            own=make_performance("Yorick", team_key="BLUE", win=True),
-            opponent=make_performance("Darius"),
+            own=make_performance("Yorick", team_key="BLUE", win=True, award="MVP"),
+            opponent=make_performance("Darius", award="SVP"),
         ),
         make_match("m2", win=True, index=1),
         make_match("m3", win=False, index=2),
@@ -387,6 +392,8 @@ def test_render_from_json_regenerates_reports(tmp_path: Path) -> None:
     assert "当前段位：大师 277 胜点" in Path(result.report_path or "").read_text(encoding="utf-8")
     assert len(renderer.details) == 3
     assert renderer.details[0].player_radar
+    assert renderer.details[0].player_award == "MVP"
+    assert renderer.details[0].opponent_award == "SVP"
 
 
 def test_main_render_json_cli(tmp_path: Path, capsys) -> None:
@@ -715,10 +722,12 @@ def test_run_renders_match_details_in_markdown_and_json(tmp_path: Path) -> None:
     payload = json.loads(Path(result.accounts[0].json_path or "").read_text(encoding="utf-8"))
     first, second = payload["matches"][0], payload["matches"][1]
     assert first["op_score_rank"] == 6
+    assert first["own_performance"]["award"] == "MVP"
     assert first["lane_opponent"]["champion_name"] == "诺克萨斯之手"
     assert first["lane_opponent"]["summoner_name"] == "Opponent#KR1"
     assert first["lane_opponent"]["kills"] == 2
     assert first["lane_opponent"]["cs"] == 184
+    assert first["lane_opponent"]["award"] == "SVP"
     assert second["lane_opponent"] is None
 
 
