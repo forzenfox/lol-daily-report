@@ -1,0 +1,122 @@
+{
+  "account": "我心如铁石#43240",
+  "display_name": "凯哥",
+  "region": "kr",
+  "day": "2026-11-10",
+  "window": {
+    "start": "2026-11-10T00:00:00+08:00",
+    "end": "2026-11-11T00:00:00+08:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "complete": true,
+  "pages": 1,
+  "warnings": [],
+  "source": {
+    "provider": "sqgg",
+    "collector": "sgp-api",
+    "url": "https://sqgg.cc/summoner/%E8%89%BE%E6%AC%A7%E5%B0%BC%E4%BA%9A?gameName=%E6%88%91%E5%BF%83%E5%A6%82%E9%93%81%E7%9F%B3&tagLine=43240&puuid=fd8ed480-46de-51ba-a251-705ac420d884"
+  },
+  "fetched_at": "2026-11-11T01:08:14.097888+00:00",
+  "rank": {
+    "tier": "MASTER",
+    "division": null,
+    "league_points": 259,
+    "wins": 209,
+    "losses": 195,
+    "display": "大师 259 胜点"
+  },
+  "stats": {
+    "total_games": 1,
+    "wins": 0,
+    "losses": 1,
+    "win_rate": 0.0,
+    "kda": 4.8,
+    "avg_kills": 9.0,
+    "avg_deaths": 5.0,
+    "avg_assists": 15.0,
+    "avg_duration_seconds": 1863,
+    "avg_cs": 171.0,
+    "cs_per_min": 5.5,
+    "sample_sufficient": false,
+    "champions": [
+      {
+        "champion_key": "naafiri",
+        "champion_name": "百裂冥犬",
+        "games": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0,
+        "kda": 4.8,
+        "avg_kills": 9.0,
+        "avg_deaths": 5.0,
+        "avg_assists": 15.0
+      }
+    ]
+  },
+  "titles": [],
+  "matches": [
+    {
+      "match_id": "HN1_11455859016",
+      "start_time": "2026-11-10T15:25:17.228000+08:00",
+      "duration_seconds": 1863,
+      "win": false,
+      "champion_key": "naafiri",
+      "champion_name": "百裂冥犬",
+      "kills": 9,
+      "deaths": 5,
+      "assists": 15,
+      "cs": 171,
+      "position": "JUNGLE",
+      "queue_type": "SOLORANKED",
+      "queue_label": "单双排",
+      "game_map": "SUMMONERS_RIFT",
+      "kda_ratio": 4.8,
+      "cs_per_min": 5.51,
+      "op_score": 10.5,
+      "op_score_rank": 1,
+      "kill_participation": 67,
+      "own_performance": {
+        "summoner_name": "我心如铁石#43240",
+        "champion_key": "naafiri",
+        "champion_name": "百裂冥犬",
+        "position": "JUNGLE",
+        "team_key": "BLUE",
+        "kills": 9,
+        "deaths": 5,
+        "assists": 15,
+        "cs": 171,
+        "gold_earned": 14313,
+        "damage_to_champions": 35821,
+        "damage_taken": 39331,
+        "vision_score": 22,
+        "team_kills": 36,
+        "op_score": 10.5,
+        "win": false,
+        "team_damage_to_champions": 161158,
+        "team_damage_taken": 158279
+      },
+      "lane_opponent": {
+        "summoner_name": "巴黎剩母阿木木#43969",
+        "champion_key": "elise",
+        "champion_name": "蜘蛛女皇",
+        "position": "JUNGLE",
+        "team_key": "RED",
+        "kills": 14,
+        "deaths": 7,
+        "assists": 8,
+        "cs": 194,
+        "gold_earned": 15652,
+        "damage_to_champions": 34554,
+        "damage_taken": 34642,
+        "vision_score": 31,
+        "team_kills": 44,
+        "op_score": 9.9,
+        "win": true,
+        "team_damage_to_champions": 135457,
+        "team_damage_taken": 199101
+      },
+      "source": "sqgg",
+      "fetched_at": "2026-11-11T01:08:14.097888+00:00"
+    }
+  ]
+}
