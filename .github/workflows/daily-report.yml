@@ -1,9 +1,9 @@
-name: LOL 韩服主播每日战报
+name: LOL 主播每日单双排战报
 
 on:
   schedule:
-    # UTC 21:00 = Asia/Shanghai 次日 05:00
-    - cron: "0 21 * * *"
+    # UTC 17:00 = Asia/Shanghai 次日 01:00
+    - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       date:
