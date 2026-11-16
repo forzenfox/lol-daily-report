@@ -116,6 +116,7 @@ class AccountConfig:
     server: str | None = None
     environment: str | None = None
     enabled: bool = True
+    puuid: str | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,8 @@ class AccountResult:
     image_path: str | None = None
     image_error: str | None = None
     error: str | None = None
+    detected_riot_id: str | None = None
+    config_updated: bool = False
 
 
 @dataclass
@@ -179,6 +182,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
                 server=str(server) if server else None,
                 environment=str(item["environment"]) if item.get("environment") else None,
                 enabled=bool(item.get("enabled", True)),
+                puuid=str(item["puuid"]) if item.get("puuid") else None,
             )
         )
 
@@ -216,6 +220,27 @@ def _parse_sqgg(raw: object) -> SqggSettings:
 def _safe_filename(text: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|#]', "-", text).strip(" .-")
     return cleaned or "account"
+
+
+def _rewrite_riot_id(config_path: str | Path, old: str, new: str) -> bool:
+    """把 config.yaml 中某账号的 riot_id 原位替换为最新值；保留注释与格式。
+
+    未命中旧值（配置被手工调整）时返回 False 并保持文件不变。
+    """
+    path = Path(config_path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    for pattern, replacement in (
+        (f'riot_id: "{old}"', f'riot_id: "{new}"'),
+        (f"riot_id: '{old}'", f"riot_id: '{new}'"),
+        (f"riot_id: {old}", f'riot_id: "{new}"'),
+    ):
+        if pattern in text:
+            path.write_text(text.replace(pattern, replacement), encoding="utf-8", newline="\n")
+            return True
+    return False
 
 
 def build_report_title(display_name: str, provider: str) -> str:
@@ -623,14 +648,34 @@ def _localize_performance(
     )
 
 
+def _detect_rename(
+    account: AccountConfig,
+    collection: DayCollection,
+    config_path: str | Path,
+    auto_fix_config: bool,
+) -> tuple[str | None, bool]:
+    """比较采集到的最新 Riot ID 与配置；auto_fix_config 为真时回写配置。"""
+    detected = collection.detected_riot_id
+    if not detected or detected.casefold() == account.riot_id.casefold():
+        return None, False
+    updated = bool(auto_fix_config and _rewrite_riot_id(config_path, account.riot_id, detected))
+    return detected, updated
+
+
 def run(
     config: AppConfig,
     day: date,
     provider_factory: Callable[[AccountConfig], ProviderLike] | None = None,
     output_dir: str | Path | None = None,
     renderer: RendererLike | None = None,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    auto_fix_config: bool = False,
 ) -> RunResult:
-    """逐个账号生成战报；单账号失败不影响其它账号，图片失败不阻断文案。"""
+    """逐个账号生成战报；单账号失败不影响其它账号，图片失败不阻断文案。
+
+    检测到账号改名（detected_riot_id 与配置不一致）时记录改名信息；
+    auto_fix_config 为真时把最新 riot_id 原位写回 config.yaml。
+    """
     catalog = _load_catalog_safely()
     champion_names = {entry.key: entry.name for entry in catalog} if catalog else {}
     sqgg_runtime: SqggRuntime | None = None
@@ -648,8 +693,11 @@ def run(
                 config.timezone,
                 account.environment,
                 runtime=sqgg_runtime,
+                puuid=account.puuid,
             )
-        return OpggProvider(timezone=config.timezone, champion_names=champion_names)
+        return OpggProvider(
+            timezone=config.timezone, champion_names=champion_names, puuid=account.puuid
+        )
 
     factory = provider_factory or default_factory
 
@@ -662,11 +710,20 @@ def run(
         try:
             provider = factory(account)
             collection = provider.collect_day(account.riot_id, day, region=account.region)
+            detected_riot_id, config_updated = _detect_rename(
+                account, collection, config_path, auto_fix_config
+            )
             report_matches = select_report_matches(collection.matches)
             if not report_matches:
                 # 当日无 5v5 排位对局：不创建目录、不产出任何文件，仅记录跳过状态供日志输出。
                 result.accounts.append(
-                    AccountResult(account=account.riot_id, ok=True, skipped=True)
+                    AccountResult(
+                        account=account.riot_id,
+                        ok=True,
+                        skipped=True,
+                        detected_riot_id=detected_riot_id,
+                        config_updated=config_updated,
+                    )
                 )
                 continue
             collection = replace(collection, matches=report_matches)
@@ -738,6 +795,8 @@ def run(
                     json_path=str(json_path),
                     image_path=image_path,
                     image_error=image_error,
+                    detected_riot_id=detected_riot_id,
+                    config_updated=config_updated,
                 )
             )
         except Exception as exc:  # noqa: BLE001 - 单账号失败需记录并继续
@@ -763,6 +822,12 @@ def _print_account_result(item: AccountResult) -> None:
         print(f"[OK] {item.account}: {item.matches} 场 -> {item.report_path}{suffix}")
     else:
         print(f"[FAIL] {item.account}: {item.error}", file=sys.stderr)
+    if item.detected_riot_id:
+        print(f"[RENAME] {item.account} -> {item.detected_riot_id}: 检测到账号改名")
+        if item.config_updated:
+            print(f"[FIX] 已自动更新 config.yaml: riot_id -> {item.detected_riot_id}")
+        else:
+            print("[HINT] 使用 --auto-fix-config 可自动更新 config.yaml")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -775,6 +840,11 @@ def main(argv: list[str] | None = None) -> int:
         "--render-json",
         default=None,
         help="从已有战报 JSON 重新生成产物（离线，不访问数据源）",
+    )
+    parser.add_argument(
+        "--auto-fix-config",
+        action="store_true",
+        help="检测到账号改名时自动更新 config.yaml 中的 riot_id",
     )
     args = parser.parse_args(argv)
 
@@ -797,7 +867,13 @@ def main(argv: list[str] | None = None) -> int:
 
     timezone = ZoneInfo(config.timezone)
     day = date.fromisoformat(args.date) if args.date else datetime.now(timezone).date()
-    result = run(config, day, output_dir=args.output_dir)
+    result = run(
+        config,
+        day,
+        output_dir=args.output_dir,
+        config_path=args.config,
+        auto_fix_config=args.auto_fix_config,
+    )
 
     for account in result.accounts:
         _print_account_result(account)

@@ -624,6 +624,7 @@ class SqggProvider:
         timezone: str | ZoneInfo = "Asia/Shanghai",
         *,
         environment: str | None = None,
+        puuid: str | None = None,
         page_size: int = PAGE_SIZE,
         max_pages: int = 5,
         reserve_seconds: int = 300,
@@ -634,6 +635,7 @@ class SqggProvider:
         self.server = server
         self.tz = ZoneInfo(timezone) if isinstance(timezone, str) else timezone
         self.environment = environment
+        self.puuid = puuid
         self.page_size = page_size
         self.max_pages = max_pages
         self.reserve_seconds = reserve_seconds
@@ -656,7 +658,8 @@ class SqggProvider:
 
         game_name, tag_line = _split_riot_id(riot_id)
         environment = self.environment or self._environment_resolver.code_for(self.server)
-        puuid = self._resolve_account(environment, game_name, tag_line)
+        # 配置了 puuid 时跳过按名解析，改名不再影响采集。
+        puuid = self.puuid or self._resolve_account(environment, game_name, tag_line)
         self.page_url = (
             f"{BASE_URL}/summoner/{urllib.parse.quote(self.server)}"
             f"?gameName={urllib.parse.quote(game_name)}"
@@ -678,6 +681,7 @@ class SqggProvider:
 
         matches: list[NormalizedMatch] = []
         warnings: list[str] = []
+        detected_riot_id: str | None = None
         pages = 0
         oldest_seen: datetime | None = None
         exhausted = partial_failed = hit_page_cap = timed_out = False
@@ -727,6 +731,12 @@ class SqggProvider:
                     continue
                 if window_start <= start_time < window_end:
                     matches.append(self._to_match(game, puuid, fetched_at, start_time))
+                    if detected_riot_id is None:
+                        participants = info.get("participants")
+                        if isinstance(participants, list):
+                            current = _participant_riot_id(participants, puuid)
+                            if current and current.casefold() != riot_id.casefold():
+                                detected_riot_id = current
             if len(games) < self.page_size or (
                 oldest_seen is not None and oldest_seen < window_start
             ):
@@ -753,6 +763,7 @@ class SqggProvider:
             warnings=warnings,
             page_url=self.page_url,
             rank=rank,
+            detected_riot_id=detected_riot_id,
         )
 
     def _resolve_account(self, environment: str, game_name: str, tag_line: str) -> str:
@@ -869,6 +880,18 @@ class SqggProvider:
             own_performance=own_performance,
             lane_opponent=lane_opponent,
         )
+
+
+def _participant_riot_id(participants: list[Any], puuid: str) -> str | None:
+    """读取目标玩家当前 Riot ID（改名检测用，按 puuid 定位）。"""
+    own = next((item for item in participants if item.get("puuid") == puuid), None)
+    if not isinstance(own, Mapping):
+        return None
+    name = str(own.get("riotIdGameName") or own.get("summonerName") or "")
+    tag = str(own.get("riotIdTagline") or "")
+    if not name:
+        return None
+    return f"{name}#{tag}" if tag else name
 
 
 def _start_time(info: Mapping[str, Any], tz: ZoneInfo) -> datetime:
@@ -1012,6 +1035,7 @@ def build_provider(
     timezone: str,
     environment: str | None = None,
     runtime: SqggRuntime | None = None,
+    puuid: str | None = None,
 ) -> SqggProvider:
     """按配置装配 HTTP、动作 ID、会话与采集器。"""
     active = runtime or build_runtime(settings, timezone)
@@ -1021,6 +1045,7 @@ def build_provider(
         server=server,
         timezone=timezone,
         environment=environment,
+        puuid=puuid,
         page_size=settings.count_per_page,
         max_pages=settings.max_pages,
         reserve_seconds=settings.reserve_seconds,

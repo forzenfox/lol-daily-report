@@ -31,6 +31,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
 )
 PAGE_SIZE = 20
+HOME_URL = "https://op.gg/"
 
 REQUIRED_PATHS: dict[str, tuple[str, ...]] = {
     "id": ("id",),
@@ -134,6 +135,7 @@ class DayCollection:
     warnings: list[str] = field(default_factory=list)
     page_url: str = ""
     rank: RankInfo | None = None
+    detected_riot_id: str | None = None
 
 
 def _nested(data: dict[str, Any], path: tuple[str, ...]) -> Any:
@@ -276,6 +278,7 @@ class OpggProvider:
         max_pages: int = 10,
         action_id: str | None = None,
         champion_names: Mapping[str, str] | None = None,
+        puuid: str | None = None,
     ) -> None:
         self.http: HttpClient = http or UrllibHttpClient(timeout=timeout)
         self.tz = ZoneInfo(timezone)
@@ -283,6 +286,7 @@ class OpggProvider:
         self.max_pages = max_pages
         self.action_id = action_id or os.environ.get("OPGG_GET_GAMES_ACTION_ID") or None
         self.champion_names = {key.lower(): value for key, value in (champion_names or {}).items()}
+        self.puuid = puuid
 
     # ------------------------------------------------------------------ 账号
     def resolve_account(self, riot_id: str, region: str = "kr") -> ResolvedAccount:
@@ -310,9 +314,13 @@ class OpggProvider:
         return match.group(1) if match else None
 
     # ------------------------------------------------------------------ 动作
-    def _discover_action_id(self, html: str) -> str:
+    def _discover_action_id(self, html: str | None = None) -> str:
         if self.action_id:
             return self.action_id
+        if html is None:
+            status, html = self.http.get(HOME_URL)
+            if status != 200:
+                raise ProviderError(f"页面返回 HTTP {status}")
         chunks = re.findall(r'https://[^"\']+/_next/static/chunks/[^"\']+\.js', html)
         for url in dict.fromkeys(chunks):
             status, script = self.http.get(url)
@@ -349,11 +357,25 @@ class OpggProvider:
         window_start = datetime.combine(day, dt_time.min, tzinfo=self.tz)
         window_end = window_start + timedelta(days=1)
 
-        account, html = self._resolve(riot_id, region)
-        rank = parse_opgg_rank(html)
+        # 名字解析失败（如改名）且配置了 puuid 时，降级为 puuid 直采；段位缺失记 warning。
+        rank: RankInfo | None = None
+        warnings: list[str] = []
+        html: str | None = None
+        try:
+            account, html = self._resolve(riot_id, region)
+            rank = parse_opgg_rank(html)
+            post_url = account.page_url
+        except ProviderError:
+            if self.puuid is None:
+                raise
+            account = ResolvedAccount(page_url=self._page_url(riot_id, region), puuid=self.puuid)
+            html = None
+            post_url = HOME_URL
+            warnings.append("rank_unavailable")
         action_id = self._discover_action_id(html)
 
         matches: list[NormalizedMatch] = []
+        detected_riot_id: str | None = None
         pages = 0
         cursor = ""
         oldest_seen: datetime | None = None
@@ -373,7 +395,7 @@ class OpggProvider:
                 }
             ]
             status, text, _ = self.http.post(
-                account.page_url, body, self._post_headers(account.page_url, action_id)
+                post_url, body, self._post_headers(account.page_url, action_id)
             )
             if status != 200:
                 raise ProviderError(f"getGames 返回 HTTP {status}")
@@ -388,6 +410,10 @@ class OpggProvider:
                     oldest_seen = match.start_time
                 if window_start <= match.start_time < window_end:
                     matches.append(match)
+                    if detected_riot_id is None:
+                        current = _own_current_riot_id(game)
+                        if current and current.casefold() != riot_id.casefold():
+                            detected_riot_id = current
 
             if len(batch) < PAGE_SIZE:
                 exhausted = True
@@ -398,7 +424,6 @@ class OpggProvider:
         else:
             hit_page_cap = True
 
-        warnings: list[str] = []
         complete = exhausted or (oldest_seen is not None and oldest_seen < window_start)
         if hit_page_cap and not complete:
             complete = False
@@ -416,6 +441,7 @@ class OpggProvider:
             warnings=warnings,
             page_url=account.page_url,
             rank=rank,
+            detected_riot_id=detected_riot_id,
         )
 
     def _to_match(self, game: dict[str, Any], fetched_at: datetime) -> NormalizedMatch:
@@ -507,6 +533,23 @@ class OpggProvider:
             rival_taken,
             award=_team_award(other_team, candidates[0]),
         )
+
+
+def _own_current_riot_id(game: dict[str, Any]) -> str | None:
+    """从对局参战者中读取目标玩家当前的 Riot ID（按 participant_id 定位，与名字无关）。"""
+    target = game.get("participant_id")
+    if target is None:
+        return None
+    for item in (game.get("team_blue") or []) + (game.get("team_red") or []):
+        if item.get("participant_id") != target:
+            continue
+        summoner = item.get("summoner") or {}
+        game_name = str(summoner.get("game_name") or summoner.get("name") or "")
+        tagline = str(summoner.get("tagline") or "")
+        if not game_name:
+            return None
+        return f"{game_name}#{tagline}" if tagline else game_name
+    return None
 
 
 def _team_totals(participants: list[dict[str, Any]]) -> tuple[int, int, int]:

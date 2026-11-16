@@ -767,3 +767,95 @@ def test_collect_day_supports_historical_date() -> None:
     assert [match.match_id for match in collection.matches] == ["HN1_2", "HN1_3"]
     assert collection.complete is True
     assert collection.window_start == datetime(2026, 10, 28, 0, 0, tzinfo=SHANGHAI)
+
+
+# --------------------------------------------------------------------------- puuid 直采与改名检测
+
+
+def test_collect_day_with_puuid_skips_name_resolution() -> None:
+    http = FakeHttp()
+    queue_rank(http)
+    queue_games(http, [riot_game(1, start_ms(30, 5))])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session, puuid=PUUID).collect_day(
+        "旧名字#00000", date(2026, 10, 30)
+    )
+
+    assert [match.match_id for match in collection.matches] == ["HN1_1"]
+    assert not any(
+        call[0] == "json" and call[1] == "/sqgg-api/sgp-service/summoner-by-name"
+        for call in http.calls
+    )
+    assert collection.page_url.startswith("https://sqgg.cc/summoner/")
+
+
+# --------------------------------------------------------------------------- puuid 锁定与改名检测
+
+
+def set_own_participant_name(game: dict, name: str, tag: str) -> None:
+    for item in game["json"]["participants"]:
+        if item["puuid"] == PUUID:
+            item["riotIdGameName"] = name
+            item["riotIdTagline"] = tag
+
+
+def test_configured_puuid_skips_summoner_lookup() -> None:
+    http = FakeHttp()
+    queue_rank(http)
+    queue_games(http, [riot_game(1, start_ms(30, 5))])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session, puuid=PUUID).collect_day(
+        "热心市民张合#65360", date(2026, 10, 30)
+    )
+
+    json_calls = [call for call in http.calls if call[0] == "json"]
+    assert [call[1] for call in json_calls] == [RANK_PATH, "/sqgg-api/sgp-service/lol-match"]
+    assert all(call[2]["puuid"] == PUUID for call in json_calls)
+    assert len(collection.matches) == 1
+
+
+def test_detected_riot_id_reports_rename() -> None:
+    http = FakeHttp()
+    queue_rank(http)
+    game = riot_game(1, start_ms(30, 5))
+    set_own_participant_name(game, "新名字", "9999")
+    queue_games(http, [game])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session, puuid=PUUID).collect_day(
+        "热心市民张合#65360", date(2026, 10, 30)
+    )
+
+    assert collection.detected_riot_id == "新名字#9999"
+
+
+def test_detected_riot_id_none_when_name_matches() -> None:
+    http = FakeHttp()
+    queue_rank(http)
+    game = riot_game(1, start_ms(30, 5))
+    set_own_participant_name(game, "热心市民张合", "65360")
+    queue_games(http, [game])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session, puuid=PUUID).collect_day(
+        "热心市民张合#65360", date(2026, 10, 30)
+    )
+
+    assert collection.detected_riot_id is None
+
+
+def test_detected_riot_id_ignores_case_only_difference() -> None:
+    http = FakeHttp()
+    queue_rank(http)
+    game = riot_game(1, start_ms(30, 5))
+    set_own_participant_name(game, "热心市民张合", "ABC")
+    queue_games(http, [game])
+    session = FakeSession(make_window(end_time=NOW + timedelta(minutes=50)))
+
+    collection = make_provider(http, session, puuid=PUUID).collect_day(
+        "热心市民张合#abc", date(2026, 10, 30)
+    )
+
+    assert collection.detected_riot_id is None

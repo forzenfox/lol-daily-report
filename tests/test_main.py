@@ -16,6 +16,8 @@ from main import (
     AppConfig,
     RunResult,
     _ensure_catalog,
+    _print_account_result,
+    _rewrite_riot_id,
     build_report_title,
     load_config,
     main,
@@ -799,9 +801,10 @@ def test_run_dispatches_sqgg_account(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(main_module, "build_runtime", lambda _settings, _tz: object())
 
-    def fake_build(settings, server, timezone, environment=None, runtime=None):
+    def fake_build(settings, server, timezone, environment=None, runtime=None, puuid=None):
         captured["server"] = server
         captured["environment"] = environment
+        captured["puuid"] = puuid
         return FakeProvider(make_collection("热心市民张合#65360"))
 
     monkeypatch.setattr(main_module, "build_provider", fake_build)
@@ -821,7 +824,7 @@ def test_run_dispatches_sqgg_account(tmp_path: Path, monkeypatch) -> None:
     result = run(config, date(2026, 10, 20), output_dir=tmp_path)
 
     assert result.accounts[0].ok is True
-    assert captured == {"server": "艾欧尼亚", "environment": "HN1"}
+    assert captured == {"server": "艾欧尼亚", "environment": "HN1", "puuid": None}
     payload = json.loads(Path(result.accounts[0].json_path or "").read_text(encoding="utf-8"))
     assert payload["source"]["provider"] == "sqgg"
     assert payload["source"]["collector"] == "sgp-api"
@@ -861,3 +864,171 @@ def test_ensure_catalog_localizes_lane_opponent_name(tmp_path: Path, monkeypatch
 
     assert collection.matches[0].lane_opponent is not None
     assert collection.matches[0].lane_opponent.champion_name == "诺手"
+
+
+# --------------------------------------------------------------------------- puuid 锁定与改名回正
+
+
+PUUID = "4e009383-921f-54b2-82ec-5cddeaf0ec34"
+RENAME_CONFIG = """# 主播配置：修改后请保持注释
+accounts:
+  - display_name: "洞主"
+    riot_id: "热心市民张合#65360"   # 旧ID，改名后需更新
+    provider: "sqgg"
+    server: "艾欧尼亚"
+    puuid: "4e009383-921f-54b2-82ec-5cddeaf0ec34"
+report:
+  render_image: false
+"""
+
+
+def write_config(tmp_path: Path) -> Path:
+    path = tmp_path / "config.yaml"
+    path.write_text(RENAME_CONFIG, encoding="utf-8")
+    return path
+
+
+def renamed_config(tmp_path: Path) -> AppConfig:
+    loaded = load_config(write_config(tmp_path))
+    return AppConfig(accounts=loaded.accounts, auto_update_champions=False)
+
+
+def make_renamed_collection(detected: str) -> DayCollection:
+    collection = make_collection()
+    collection.detected_riot_id = detected
+    return collection
+
+
+def test_load_config_parses_puuid(tmp_path: Path) -> None:
+    config = load_config(write_config(tmp_path))
+
+    assert config.accounts[0].puuid == PUUID
+
+
+def test_load_config_without_puuid_defaults_to_none(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "accounts:\n  - display_name: 胡凯利\n    riot_id: 斗鱼丶胡凯利#2862\n",
+        encoding="utf-8",
+    )
+
+    assert load_config(path).accounts[0].puuid is None
+
+
+def test_run_auto_fixes_riot_id_in_config(tmp_path: Path) -> None:
+    path = write_config(tmp_path)
+    config = renamed_config(tmp_path)
+
+    result = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(
+            make_renamed_collection("热心市民张合改名#65360")
+        ),
+        output_dir=tmp_path / "out",
+        renderer=FakeRenderer(),
+        config_path=path,
+        auto_fix_config=True,
+    )
+
+    item = result.accounts[0]
+    assert item.ok is True
+    assert item.detected_riot_id == "热心市民张合改名#65360"
+    assert item.config_updated is True
+    text = path.read_text(encoding="utf-8")
+    assert 'riot_id: "热心市民张合改名#65360"   # 旧ID，改名后需更新' in text
+    assert "# 主播配置：修改后请保持注释" in text
+    assert "热心市民张合#65360" not in text
+    reloaded = load_config(path)
+    assert reloaded.accounts[0].riot_id == "热心市民张合改名#65360"
+    assert reloaded.accounts[0].display_name == "洞主"
+    assert reloaded.accounts[0].puuid == PUUID
+
+
+def test_run_reports_rename_without_touching_config_by_default(tmp_path: Path) -> None:
+    path = write_config(tmp_path)
+    config = renamed_config(tmp_path)
+
+    result = run(
+        config,
+        date(2026, 10, 20),
+        provider_factory=lambda _account: FakeProvider(
+            make_renamed_collection("热心市民张合改名#65360")
+        ),
+        output_dir=tmp_path / "out",
+        renderer=FakeRenderer(),
+        config_path=path,
+    )
+
+    assert result.accounts[0].detected_riot_id == "热心市民张合改名#65360"
+    assert result.accounts[0].config_updated is False
+    assert path.read_text(encoding="utf-8") == RENAME_CONFIG
+
+
+def test_rewrite_riot_id_returns_false_when_value_absent(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text("accounts:\n  - riot_id: other#1\n", encoding="utf-8")
+
+    assert _rewrite_riot_id(path, "missing#1", "new#2") is False
+    assert "other#1" in path.read_text(encoding="utf-8")
+
+
+def test_print_account_result_shows_rename(capsys) -> None:
+    _print_account_result(
+        AccountResult(
+            account="热心市民张合#65360",
+            ok=True,
+            matches=3,
+            report_path="x.md",
+            detected_riot_id="热心市民张合改名#65360",
+            config_updated=True,
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert "[RENAME] 热心市民张合#65360 -> 热心市民张合改名#65360" in out
+    assert "[FIX]" in out
+
+
+def test_main_passes_auto_fix_config_flag(tmp_path: Path, monkeypatch) -> None:
+    import main as main_module
+
+    path = write_config(tmp_path)
+    captured: dict[str, object] = {}
+
+    def fake_run(config, day, **kwargs):
+        captured.update(kwargs)
+        return RunResult(day=day, accounts=[])
+
+    monkeypatch.setattr(main_module, "run", fake_run)
+
+    code = main(["--config", str(path), "--date", "2026-10-20", "--auto-fix-config"])
+
+    assert code == 0
+    assert captured["auto_fix_config"] is True
+    assert str(captured["config_path"]) == str(path)
+
+
+def test_run_passes_puuid_to_opgg_provider(tmp_path: Path, monkeypatch) -> None:
+    import main as main_module
+
+    captured: dict[str, object] = {}
+
+    class FakeOpgg:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def collect_day(self, riot_id, day=None, *, region="kr"):
+            return make_collection(riot_id)
+
+    monkeypatch.setattr(main_module, "OpggProvider", FakeOpgg)
+    config = AppConfig(
+        accounts=(AccountConfig(display_name="余小C", riot_id="斗鱼丶胡凯利#2862", puuid=PUUID),),
+        auto_update_champions=False,
+        render_image=False,
+    )
+
+    result = run(config, date(2026, 10, 20), output_dir=tmp_path)
+
+    assert result.accounts[0].ok is True
+    assert captured["puuid"] == PUUID
