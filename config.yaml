@@ -10,14 +10,14 @@ accounts:
     puuid: "nbJBkHxHe6KE_siQSiE7O5upB47jv4vch4oR12t6IQiu-leFagxavuWZVXlcGJBfu9tEWv7wTYvWmg"
     enabled: true
   - display_name: "洞主"
-    riot_id: "热心市民张合#65360"
+    riot_id: "HT丶洞主#84318"   # 原账号: 热心市民张合#65360（已改名，后续可能回退）
     provider: "sqgg"
     server: "艾欧尼亚"
     environment: "HN1"
     puuid: "4e009383-921f-54b2-82ec-5cddeaf0ec34"
     enabled: true
   - display_name: "凯哥"
-    riot_id: "我心如铁石#43240"
+    riot_id: "HT丶凯菇#21920"   # 原账号: 我心如铁石#43240（已改名，后续可能回退）
     provider: "sqgg"
     server: "艾欧尼亚"
     environment: "HN1"
