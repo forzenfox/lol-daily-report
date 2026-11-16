@@ -67,7 +67,7 @@ jobs:
           SQGG_EMAIL: ${{ secrets.SQGG_EMAIL }}
           SQGG_PASSWORD: ${{ secrets.SQGG_PASSWORD }}
         run: |
-          python src/main.py --date "${TARGET_DATE}"
+          python src/main.py --date "${TARGET_DATE}" --auto-fix-config
 
       - name: 提交产物到仓库（PR 自动合并）
         env:
@@ -77,10 +77,19 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           branch="output/${TARGET_DATE}"
-          git add output/
+          git add output/ config.yaml
+
+          # config.yaml 无变化时从暂存区撤下，避免误提交
+          if git diff --cached --quiet -- config.yaml; then
+            git reset -- config.yaml >/dev/null 2>&1 || true
+          fi
 
           if ! git diff --cached --quiet; then
-            git commit -m "战报产物：${TARGET_DATE}"
+            if git diff --cached --quiet -- config.yaml; then
+              git commit -m "战报产物：${TARGET_DATE}"
+            else
+              git commit -m "战报产物：${TARGET_DATE}（含账号改名修正）"
+            fi
             git push origin "${branch}"
           else
             echo "产物无变化，跳过提交"

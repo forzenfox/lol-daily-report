@@ -339,6 +339,68 @@ def test_collect_day_includes_current_rank_from_page() -> None:
     assert collection.rank.display() == "大师 466 胜点"
 
 
+# --------------------------------------------------------------------------- puuid 兜底与改名检测
+
+
+def test_collect_day_detects_current_riot_id_from_matches() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    own = game["team_blue"][0]
+    own["summoner"]["game_name"] = "新名字"
+    own["summoner"]["tagline"] = "KR9"
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    result = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20))
+
+    assert result.detected_riot_id == "新名字#KR9"
+
+
+def test_collect_day_same_riot_id_not_reported() -> None:
+    game = build_game("m_1", "2026-10-20T22:00:00+09:00")
+    own = game["team_blue"][0]
+    own["summoner"]["game_name"] = "斗鱼丶胡凯利"
+    own["summoner"]["tagline"] = "2862"
+    fake = FakeHttp(batches=[[game]])
+    provider = make_provider(fake)
+
+    result = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20))
+
+    assert result.detected_riot_id is None
+
+
+class Page404Fake(FakeHttp):
+    """玩家页 404（改名后），但首页与 chunk 可访问。"""
+
+    def get(self, url: str) -> tuple[int, str]:
+        if "_next/static/chunks/" in url:
+            return 200, self.chunks.get(url, "")
+        if url.rstrip("/") == "https://op.gg":
+            return 200, self.html
+        return 404, ""
+
+
+def test_page_error_without_puuid_raises() -> None:
+    fake = Page404Fake()
+    provider = make_provider(fake)
+
+    with pytest.raises(ProviderError):
+        provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20))
+
+
+def test_puuid_fallback_collects_without_summoner_page() -> None:
+    fake = Page404Fake(batches=[[build_game("m_1", "2026-10-20T22:00:00+09:00")]])
+    provider = make_provider(fake, puuid=PUUID)
+
+    result = provider.collect_day("斗鱼丶胡凯利#2862", date(2026, 10, 20))
+
+    assert [m.match_id for m in result.matches] == ["m_1"]
+    assert "rank_unavailable" in result.warnings
+    assert result.rank is None
+    assert fake.posts[0]["body"][0]["puuid"] == PUUID
+    assert fake.posts[0]["url"] == "https://op.gg/"
+    assert result.page_url.startswith("https://op.gg/en/lol/summoners/kr/")
+
+
 def test_raises_schema_error_when_required_field_missing() -> None:
     broken = build_game("m_1", "2026-10-20T22:00:00+09:00")
     del broken["stats"]["kda"]
